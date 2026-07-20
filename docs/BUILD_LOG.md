@@ -8,7 +8,7 @@ Updated on every phase merge, not before. This is the single source of truth for
 
 | Phase | Status | Branch | PR | CI | Started | Completed | Notes |
 |---|---|---|---|---|---|---|---|
-| 0 — Pre-work & scaffolding | Not started | — | — | — | — | — | |
+| 0 — Pre-work & scaffolding | Complete | `phase-0-scaffolding` | [#1](https://github.com/zortojnr/woshmart-project/pull/1) | green | 2026-07-20 | 2026-07-20 | |
 | 1 — Foundation | Not started | — | — | — | — | — | |
 | 2 — Conversation engine core | Not started | — | — | — | — | — | |
 | 3 — Full conversation flow | Not started | — | — | — | — | — | |
@@ -38,6 +38,18 @@ Copy this template into a new section below for each phase as it completes — t
 - **Deferred / explicitly not done:** <anything intentionally left out, and why — should match anything flagged in the PR description>
 - **Issues found during the phase:** <anything that came up — a PRD ambiguity that had to be resolved, a decision that deviated from the docs and why>
 ```
+
+## Per-phase completion record
+
+### Phase 0 — Pre-work & scaffolding
+
+- **Merged:** 2026-07-20, PR #1 (https://github.com/zortojnr/woshmart-project/pull/1)
+- **CI:** green on merge — run 29745154859
+- **Exit criteria met:** Phase 0's code-facing exit criterion is repo scaffolding existing, matching `ARCHITECTURE.md` §4, with CI passing typecheck/lint/test — confirmed. (The ops-facing exit criterion — a WhatsApp message to the sandbox number producing a raw payload in a local log — depends on Phase 1's webhook handler and the human/ops setup in `docs/SETUP_GUIDE.md`; not applicable to this code-only PR.)
+- **What was built:** Node.js + TypeScript (strict) project per `TRD.md` §1's stack; full `ARCHITECTURE.md` §4 folder structure with real stub files; `package.json` scripts (dev/build/test/lint/format/typecheck); ESLint + Prettier; GitHub Actions CI (typecheck + lint + test); `.env.example` per `SETUP_GUIDE.md` §4; `.gitignore`.
+- **What was tested:** `npm run typecheck`, `npm run build`, `npm run lint`, `npm test` all run clean locally and in CI (placeholder smoke test only — real tests start Phase 1).
+- **Deferred / explicitly not done:** all business/conversation logic, env validation logic, Prisma migration, webhook handling — everything Phase 1+.
+- **Issues found during the phase:** `ARCHITECTURE.md` §4 shows the Prisma schema nested at `src/db/prisma/schema.prisma`; the real, populated schema (matching `DATABASE_SCHEMA.md`) already lived at the conventional root `prisma/schema.prisma`. Kept the root file as source of truth rather than duplicating it — flagged in the PR. Also: the repo had no commits on `main` at all before this phase, so the first scaffolding commit was pushed directly to `main` to give the PR a base.
 
 ## Post-MVP (Phase 9+) log
 
