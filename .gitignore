@@ -11,9 +11,6 @@ dist/
 build/
 *.tsbuildinfo
 
-# Prisma
-prisma/migrations/dev/
-
 # Logs
 *.log
 npm-debug.log*
