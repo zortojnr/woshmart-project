@@ -60,10 +60,15 @@ export async function createInitiatedOrder(input: CreateInitiatedOrderInput): Pr
         // the read-max-then-create below can't race with another order creation.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('woshmart_order_number'))`;
 
+        // Note: "\\d" (not "\d") — inside a JS template literal, \d isn't a recognized
+        // escape sequence, so JS silently drops the backslash before this ever reaches
+        // Postgres. Without the double backslash, the regex Postgres actually sees is
+        // "^WM-d+$" (literal "d"), which never matches any real order number, so MAX()
+        // always returns 0 and every call computes the same "WM-001".
         const [{ max_num: maxNum }] = await tx.$queryRaw<[{ max_num: number }]>`
-          SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM '^WM-(\d+)$') AS INTEGER)), 0) AS max_num
+          SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM '^WM-(\\d+)$') AS INTEGER)), 0) AS max_num
           FROM orders
-          WHERE order_number ~ '^WM-\d+$'
+          WHERE order_number ~ '^WM-\\d+$'
         `;
         const orderNumber = `WM-${String(maxNum + 1).padStart(3, '0')}`;
 

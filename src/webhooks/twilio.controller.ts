@@ -83,8 +83,6 @@ export async function handleInboundWebhook(req: Request, res: Response): Promise
         { err: (err as Error).message, messageSid: MessageSid, phoneNumber },
         'Failed to process inbound message',
       );
-      // eslint-disable-next-line no-console
-      console.error('TEMP-DEBUG2', phoneNumber, JSON.stringify(Body), err);
     }
   }
 
