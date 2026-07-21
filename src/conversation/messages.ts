@@ -141,3 +141,5 @@ export const ESCALATION_FALLBACK_MESSAGE =
   "Sorry, I'm having trouble understanding. Reply MENU to see your options again, or a teammate will reach out to help.";
 
 export const MEDIA_NOT_SUPPORTED_MESSAGE = 'We can only read text messages right now — no photos/files yet outside payment confirmation.';
+
+export const WAITLIST_DECLINE_MESSAGE = 'No worries — message us anytime if you\'d like to join the waitlist.';

@@ -1,5 +1,5 @@
 import { matchZone } from '../../domain/zones/zone.service';
-import { coverageConfirmedMessage, outOfCoverageMessage } from '../messages';
+import { coverageConfirmedMessage, outOfCoverageMessage, WAITLIST_DECLINE_MESSAGE } from '../messages';
 import type { HandlerResult, SessionContext, StateHandler } from '../types';
 
 interface CoverageCheckContext {
@@ -17,22 +17,28 @@ function isYes(input: string): boolean {
 //      anything unrecognized) -> waitlist offer, stay in COVERAGE_CHECK awaiting YES/NO.
 //   2. Second turn (awaitingWaitlistConfirmation) — YES logs the waitlist entry
 //      (PRD.md §11.1: "Accepted waitlist entries are logged against the customer
-//      record") and ends the flow at IDLE. Anything else also ends at IDLE without
-//      logging — PRD.md §10 has no specified copy for either reply, so none is sent.
+//      record") and ends the flow at IDLE, no PRD-specified copy so none is sent.
+//      Anything else declines and ends at IDLE too, but with a short acknowledgement
+//      (not in PRD.md §10 — see messages.ts's fallback section) rather than silence,
+//      so the customer never gets no reply at all.
 export const coverageCheckHandler: StateHandler = {
   async handle(ctx: SessionContext, input: string): Promise<HandlerResult> {
     const context = ctx.context as CoverageCheckContext;
 
     if (context.awaitingWaitlistConfirmation) {
-      const sideEffects = isYes(input)
-        ? [{ type: 'MARK_WAITLISTED', payload: { area: context.area ?? null } }]
-        : undefined;
+      if (isYes(input)) {
+        return {
+          nextState: 'IDLE',
+          nextContext: {},
+          outboundMessages: [],
+          sideEffects: [{ type: 'MARK_WAITLISTED', payload: { area: context.area ?? null } }],
+        };
+      }
 
       return {
         nextState: 'IDLE',
         nextContext: {},
-        outboundMessages: [],
-        ...(sideEffects ? { sideEffects } : {}),
+        outboundMessages: [{ body: WAITLIST_DECLINE_MESSAGE }],
       };
     }
 
