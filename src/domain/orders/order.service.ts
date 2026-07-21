@@ -53,3 +53,26 @@ export async function createOrderFromQuote(input: CreateOrderFromQuoteInput): Pr
 export async function recordFeedback(orderId: string, score: 1 | 2 | 3): Promise<Feedback> {
   return prisma.feedback.create({ data: { orderId, score } });
 }
+
+// Looked up by the human-facing order_number (WM-NNN) — that's what Woshmen/partners
+// type via the keyword protocol (docs/TRD.md §4), not the internal id. Includes the
+// relations the notification service needs to know who to message.
+export async function findOrderByNumber(orderNumber: string) {
+  return prisma.order.findUnique({
+    where: { orderNumber },
+    include: { user: true, woshman: true, partner: true },
+  });
+}
+
+// ISSUE (docs/TRD.md §4: "Flags order, no status change"). Appends to the existing
+// notes field rather than overwriting it — never touches orders.status, so this isn't
+// subject to the statemachine's legal-transition rule (CLAUDE.md rule 4 is specifically
+// about orders.status).
+export async function flagOrderIssue(orderId: string, note: string, reportedBy: string): Promise<Order> {
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+  const timestamp = new Date().toISOString();
+  const entry = `[${timestamp}] ISSUE from ${reportedBy}: ${note}`;
+  const notes = order.notes ? `${order.notes}\n${entry}` : entry;
+
+  return prisma.order.update({ where: { id: orderId }, data: { notes } });
+}

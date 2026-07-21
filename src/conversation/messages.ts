@@ -143,3 +143,30 @@ export const ESCALATION_FALLBACK_MESSAGE =
 export const MEDIA_NOT_SUPPORTED_MESSAGE = 'We can only read text messages right now — no photos/files yet outside payment confirmation.';
 
 export const WAITLIST_DECLINE_MESSAGE = 'No worries — message us anytime if you\'d like to join the waitlist.';
+
+// --- Woshman/partner keyword protocol copy (docs/TRD.md §4) — PRD.md §10 is
+// customer-facing only and has no specified text for Woshman/partner-side replies or
+// alerts, so this is new copy, kept in this same "not from PRD" category. ---
+
+export function readyForPickupAlertMessage(orderNumber: string): string {
+  return `${orderNumber} is ready for pickup from the laundry — head over when you can.`;
+}
+
+export function unknownOrderMessage(orderNumber: string): string {
+  return `We don't have an order ${orderNumber}. Please check the order number and resend.`;
+}
+
+export const MALFORMED_KEYWORD_MESSAGE =
+  'Didn\'t recognize that command. Valid formats: COLLECTED <order>, LAUNDRY <order>, READY <order>, DELIVERING <order>, DELIVERED <order> <count>pcs, ISSUE <order> <note>.';
+
+export function illegalKeywordTransitionMessage(orderNumber: string, currentStatus: string): string {
+  return `Can't update ${orderNumber} right now — current status is "${currentStatus}". Check the order and try again.`;
+}
+
+export function alreadyAtStatusMessage(orderNumber: string, status: string): string {
+  return `${orderNumber} is already marked as ${status} — no changes made.`;
+}
+
+export function keywordNotAllowedForSenderMessage(keyword: string): string {
+  return `${keyword} can't be sent from this number. Check the keyword and who's sending it.`;
+}

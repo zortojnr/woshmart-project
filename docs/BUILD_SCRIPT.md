@@ -196,10 +196,10 @@ Do not proceed to Phase 4 until this is merged.
 
 ## Phase 4 — Woshmen, partners, keyword protocol
 
-- [ ] Sender-type routing at top of webhook handler: known Woshman/partner → keyword parser; else → customer FSM
-- [ ] Keyword parser: `COLLECTED`, `LAUNDRY`, `READY`, `DELIVERING`, `DELIVERED <count>pcs`, `ISSUE <note>` (`TRD.md` §4)
-- [ ] Each keyword validated against order's current status before applying — reject with clear message on illegal action, don't silently corrupt state
-- [ ] Notification Service wired to every status transition — single fan-out point, nothing else sends WhatsApp messages directly
+- [x] Sender-type routing at top of webhook handler: known Woshman/partner → keyword parser; else → customer FSM
+- [x] Keyword parser: `COLLECTED`, `LAUNDRY`, `READY`, `DELIVERING`, `DELIVERED <count>pcs`, `ISSUE <note>` (`TRD.md` §4)
+- [x] Each keyword validated against order's current status before applying — reject with clear message on illegal action, don't silently corrupt state
+- [x] Notification Service wired to every status transition — single fan-out point, nothing else sends WhatsApp messages directly
 
 **Exit criteria:** simulated full order lifecycle via keyword messages from a test Woshman number on staging — customer receives every correct notification in order, no duplicates, no out-of-order messages.
 
