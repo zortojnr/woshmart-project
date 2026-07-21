@@ -50,6 +50,9 @@ export async function createInitiatedOrder(input: CreateInitiatedOrderInput): Pr
     orderNumber: '', // set per attempt below
   };
 
+  // eslint-disable-next-line no-console
+  console.error('TEMP-DEBUG existing order numbers before create:', (await prisma.order.findMany({ select: { orderNumber: true } })).map((o) => o.orderNumber));
+
   let lastError: unknown;
   for (let attempt = 0; attempt < ORDER_NUMBER_CREATION_ATTEMPTS; attempt++) {
     try {
@@ -60,6 +63,8 @@ export async function createInitiatedOrder(input: CreateInitiatedOrderInput): Pr
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('woshmart_order_number'))`;
         const count = await tx.order.count();
         const orderNumber = `WM-${String(count + 1).padStart(3, '0')}`;
+        // eslint-disable-next-line no-console
+        console.error('TEMP-DEBUG order-number attempt', attempt, 'count', count, 'orderNumber', orderNumber);
         return tx.order.create({ data: { ...data, orderNumber } });
       });
     } catch (err) {
