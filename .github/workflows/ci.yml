@@ -47,7 +47,7 @@ jobs:
       JWT_SIGNING_SECRET: ci_only_jwt_signing_secret_not_real_00000000
       # CI-only fixture values for the bank-transfer message copy — never a real account.
       BANK_NAME: CI Test Bank
-      BANK_ACCOUNT_NUMBER: 0000000000
+      BANK_ACCOUNT_NUMBER: "0000000000"
 
     steps:
       - uses: actions/checkout@v4

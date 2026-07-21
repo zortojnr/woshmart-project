@@ -3,7 +3,7 @@
 import type { Order, Prisma } from '@prisma/client';
 import { prisma } from '../../db/client';
 
-const ORDER_NUMBER_CREATION_ATTEMPTS = 5;
+const ORDER_NUMBER_CREATION_ATTEMPTS = 3;
 
 export interface CreateInitiatedOrderInput {
   userId: string;
@@ -26,10 +26,11 @@ function isUniqueConstraintViolation(err: unknown): boolean {
 }
 
 // Human-facing order numbers are sequential ("WM-001", per DATABASE_SCHEMA.md), derived
-// from the current order count. At this system's real scale (low hundreds/month, per
-// TRD.md §6 scalability notes) a genuine concurrent collision is rare, but not
-// impossible — retry a few times on a unique-constraint conflict rather than assuming
-// count+1 is always free.
+// from the current order count. A plain count-then-create race is real under
+// concurrency (caught by concurrent test suite load, not yet in production, but the
+// same race exists there too) — serialized with a Postgres advisory lock scoped to the
+// transaction, rather than a schema change/new sequence table. The retry loop stays as
+// a defensive fallback, not the primary safeguard.
 export async function createInitiatedOrder(input: CreateInitiatedOrderInput): Promise<Order> {
   const data: Prisma.OrderCreateInput = {
     user: { connect: { id: input.userId } },
@@ -51,11 +52,16 @@ export async function createInitiatedOrder(input: CreateInitiatedOrderInput): Pr
 
   let lastError: unknown;
   for (let attempt = 0; attempt < ORDER_NUMBER_CREATION_ATTEMPTS; attempt++) {
-    const count = await prisma.order.count();
-    const orderNumber = `WM-${String(count + 1).padStart(3, '0')}`;
-
     try {
-      return await prisma.order.create({ data: { ...data, orderNumber } });
+      return await prisma.$transaction(async (tx) => {
+        // Advisory lock held for the transaction's duration — any other concurrent
+        // caller using the same key blocks here until this transaction commits, so
+        // the count-then-create below can't race with another order creation.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('woshmart_order_number'))`;
+        const count = await tx.order.count();
+        const orderNumber = `WM-${String(count + 1).padStart(3, '0')}`;
+        return tx.order.create({ data: { ...data, orderNumber } });
+      });
     } catch (err) {
       lastError = err;
       if (!isUniqueConstraintViolation(err)) {
