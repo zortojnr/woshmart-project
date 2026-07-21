@@ -26,11 +26,12 @@ function isUniqueConstraintViolation(err: unknown): boolean {
 }
 
 // Human-facing order numbers are sequential ("WM-001", per DATABASE_SCHEMA.md), derived
-// from the current order count. A plain count-then-create race is real under
-// concurrency (caught by concurrent test suite load, not yet in production, but the
-// same race exists there too) — serialized with a Postgres advisory lock scoped to the
-// transaction, rather than a schema change/new sequence table. The retry loop stays as
-// a defensive fallback, not the primary safeguard.
+// from the highest existing "WM-NNN"-formatted number, not a plain row count — a plain
+// count is only safe if every single row in the table follows this exact numbering
+// scheme, which doesn't hold (test fixtures create orders with other id formats; a
+// future data migration or manual seed could too). Serialized with a Postgres advisory
+// lock scoped to the transaction so two concurrent creators can't both compute the
+// same "next" number; the retry loop is a defensive fallback, not the primary safeguard.
 export async function createInitiatedOrder(input: CreateInitiatedOrderInput): Promise<Order> {
   const data: Prisma.OrderCreateInput = {
     user: { connect: { id: input.userId } },
@@ -50,21 +51,22 @@ export async function createInitiatedOrder(input: CreateInitiatedOrderInput): Pr
     orderNumber: '', // set per attempt below
   };
 
-  // eslint-disable-next-line no-console
-  console.error('TEMP-DEBUG existing order numbers before create:', (await prisma.order.findMany({ select: { orderNumber: true } })).map((o) => o.orderNumber));
-
   let lastError: unknown;
   for (let attempt = 0; attempt < ORDER_NUMBER_CREATION_ATTEMPTS; attempt++) {
     try {
       return await prisma.$transaction(async (tx) => {
         // Advisory lock held for the transaction's duration — any other concurrent
         // caller using the same key blocks here until this transaction commits, so
-        // the count-then-create below can't race with another order creation.
+        // the read-max-then-create below can't race with another order creation.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('woshmart_order_number'))`;
-        const count = await tx.order.count();
-        const orderNumber = `WM-${String(count + 1).padStart(3, '0')}`;
-        // eslint-disable-next-line no-console
-        console.error('TEMP-DEBUG order-number attempt', attempt, 'count', count, 'orderNumber', orderNumber);
+
+        const [{ max_num: maxNum }] = await tx.$queryRaw<[{ max_num: number }]>`
+          SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM '^WM-(\d+)$') AS INTEGER)), 0) AS max_num
+          FROM orders
+          WHERE order_number ~ '^WM-\d+$'
+        `;
+        const orderNumber = `WM-${String(maxNum + 1).padStart(3, '0')}`;
+
         return tx.order.create({ data: { ...data, orderNumber } });
       });
     } catch (err) {
