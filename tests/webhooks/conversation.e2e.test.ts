@@ -88,7 +88,9 @@ describe('Conversation engine — two-turn WELCOME -> COVERAGE_CHECK, driven thr
 
     const session = await prisma.session.findUnique({ where: { phoneNumber } });
     expect(session?.state).toBe('SERVICE_SELECTION');
-    expect(session?.context).toEqual({ area: 'Maitumbi' });
+    // Also carries the engine's own __lastPromptSent bookkeeping (Phase 3) — the
+    // business-relevant field is area.
+    expect(session?.context).toMatchObject({ area: 'Maitumbi' });
 
     const outbound = await prisma.message.findMany({
       where: { phoneNumber, direction: 'outbound' },
@@ -98,11 +100,12 @@ describe('Conversation engine — two-turn WELCOME -> COVERAGE_CHECK, driven thr
     expect(outbound[1]?.body).toBe(coverageConfirmedMessage('Maitumbi'));
   });
 
-  it('a further reply once the session is past COVERAGE_CHECK does not crash the webhook', async () => {
-    // No handler is registered for SERVICE_SELECTION yet (Phase 3) — the engine must
-    // fall through gracefully rather than throwing, and the webhook must still 200.
+  it('turn 3: SERVICE_SELECTION now has a real handler (Phase 3) — a valid bundle reply advances the FSM further', async () => {
     const res = await postInbound(phoneNumber, '1', `SM_e2e_turn3_${Date.now()}`);
     expect(res.status).toBe(200);
-    expect(createMessageMock).toHaveBeenCalledTimes(2);
+    expect(createMessageMock).toHaveBeenCalledTimes(3);
+
+    const session = await prisma.session.findUnique({ where: { phoneNumber } });
+    expect(session?.state).toBe('ADDRESS_COLLECTION');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coverageConfirmedMessage, outOfCoverageMessage } from '../../../src/conversation/messages';
+import { coverageConfirmedMessage, outOfCoverageMessage, WAITLIST_DECLINE_MESSAGE } from '../../../src/conversation/messages';
 import { coverageCheckHandler } from '../../../src/conversation/states/coverageCheck';
 import type { SessionContext } from '../../../src/conversation/types';
 
@@ -67,14 +67,14 @@ describe('coverageCheckHandler — second turn (waitlist YES/NO)', () => {
     expect(result.sideEffects).toEqual([{ type: 'MARK_WAITLISTED', payload: { area: 'Kpakungu' } }]);
   });
 
-  it('a non-YES reply declines without a side effect and still ends at IDLE', async () => {
+  it('a non-YES reply declines with a short acknowledgement (never silence) and still ends at IDLE', async () => {
     const result = await coverageCheckHandler.handle(
       ctx({ awaitingWaitlistConfirmation: true, area: 'Kpakungu' }),
       'no thanks',
     );
 
     expect(result.nextState).toBe('IDLE');
-    expect(result.outboundMessages).toEqual([]);
+    expect(result.outboundMessages).toEqual([{ body: WAITLIST_DECLINE_MESSAGE }]);
     expect(result.sideEffects).toBeUndefined();
   });
 });

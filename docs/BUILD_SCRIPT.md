@@ -144,11 +144,11 @@ green. Do not proceed to Phase 3 until this is merged.
 
 ## Phase 3 — Full conversation flow
 
-- [ ] Remaining FSM states: `SERVICE_SELECTION` → `ADDRESS_COLLECTION` → `PICKUP_TIME` → `PAYMENT_METHOD` → `QUOTE_PENDING` → `AWAITING_PAYMENT` → `FEEDBACK_PENDING`
-- [ ] Pricing Service — bundle lookup, fee calculation, minimum order rule (`PRD.md` §6). Unit tested in isolation before wiring into the FSM
-- [ ] Order Service — creation on YES-confirmation, status transitions enforced via `order.statemachine.ts` (`TRD.md` §9) — illegal transitions rejected in code
-- [ ] Message copy wired exactly from `PRD.md` §10 — no paraphrasing
-- [ ] Fallback/error handling: unmatched input, 3-strikes escalation, unexpected media, no-active-session default
+- [x] Remaining FSM states: `SERVICE_SELECTION` → `ADDRESS_COLLECTION` → `PICKUP_TIME` → `PAYMENT_METHOD` → `QUOTE_PENDING` → `AWAITING_PAYMENT` → `FEEDBACK_PENDING`
+- [x] Pricing Service — bundle lookup, fee calculation, minimum order rule (`PRD.md` §6). Unit tested in isolation before wiring into the FSM
+- [x] Order Service — creation on YES-confirmation, status transitions enforced via `order.statemachine.ts` (`TRD.md` §9) — illegal transitions rejected in code
+- [x] Message copy wired exactly from `PRD.md` §10 — no paraphrasing
+- [x] Fallback/error handling: unmatched input, 3-strikes escalation, unexpected media, no-active-session default
 
 **Exit criteria:** full order placed end-to-end via WhatsApp on staging, "hi" through to an `orders` row at `awaiting_payment` (or ready for COD dispatch), every message matching `PRD.md` copy exactly.
 

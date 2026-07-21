@@ -18,6 +18,8 @@ function runWithEnv(envOverrides: Record<string, string | undefined>) {
     'DATABASE_URL',
     'REDIS_URL',
     'JWT_SIGNING_SECRET',
+    'BANK_NAME',
+    'BANK_ACCOUNT_NUMBER',
     'SENTRY_DSN',
     'OBJECT_STORAGE_ACCESS_KEY_ID',
     'OBJECT_STORAGE_SECRET_ACCESS_KEY',
@@ -51,6 +53,8 @@ const validEnv = {
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   REDIS_URL: 'redis://localhost:6379',
   JWT_SIGNING_SECRET: 'a'.repeat(32),
+  BANK_NAME: 'Test Bank',
+  BANK_ACCOUNT_NUMBER: '0000000000',
 };
 
 describe('config/env', () => {
