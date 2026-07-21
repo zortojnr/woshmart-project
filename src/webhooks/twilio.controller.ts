@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
+import { processInboundMessage } from '../conversation/engine';
 import { prisma } from '../db/client';
 import { logger } from '../lib/logger';
 
@@ -20,9 +21,9 @@ const inboundSchema = z.object({
 });
 
 // POST /webhooks/twilio/inbound — customer, Woshman, or partner message.
-// No FSM/keyword routing yet (Phase 2+): this phase only proves the pipe is secure
-// and idempotent — validate signature (upstream middleware), dedupe by MessageSid,
-// persist, respond fast.
+// Woshman/partner keyword routing is Phase 4 — every inbound message goes to the
+// customer conversation FSM for now. Validate signature (upstream middleware), dedupe
+// by MessageSid, persist, dispatch to the engine, respond.
 export async function handleInboundWebhook(req: Request, res: Response): Promise<void> {
   const parsed = inboundSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -34,6 +35,7 @@ export async function handleInboundWebhook(req: Request, res: Response): Promise
   const { MessageSid, From, Body } = parsed.data;
   const phoneNumber = normalizePhoneNumber(From);
 
+  let isDuplicate = false;
   try {
     await prisma.message.create({
       data: {
@@ -47,9 +49,24 @@ export async function handleInboundWebhook(req: Request, res: Response): Promise
     });
   } catch (err) {
     if (isUniqueConstraintViolation(err)) {
+      isDuplicate = true;
       logger.info({ messageSid: MessageSid }, 'Duplicate inbound webhook — already processed, skipping');
     } else {
       throw err;
+    }
+  }
+
+  if (!isDuplicate) {
+    try {
+      await processInboundMessage(phoneNumber, Body ?? '');
+    } catch (err) {
+      // A conversation-engine failure must never surface as a failed webhook — Twilio
+      // would retry the whole delivery, and the inbound message row is already
+      // persisted (idempotency dedupe above would then just skip it next time).
+      logger.error(
+        { err: (err as Error).message, messageSid: MessageSid, phoneNumber },
+        'Conversation engine failed to process inbound message',
+      );
     }
   }
 

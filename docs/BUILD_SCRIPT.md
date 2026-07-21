@@ -102,11 +102,11 @@ Do not merge until CI is green. Do not proceed to Phase 2 until this is merged.
 
 ## Phase 2 — Conversation engine core
 
-- [ ] Session model + repository (`sessions` table), load-or-create by phone number
-- [ ] FSM driver (`conversation/engine.ts`) — orchestration only, no business logic inline
-- [ ] Implement `WELCOME` → `COVERAGE_CHECK` end-to-end first (smallest full-loop slice)
-- [ ] Messaging Service wired — real outbound sends, retry/backoff on transient failures, no retry on permanent failures
-- [ ] Manual test: message sandbox, get welcome message, reply with a zone, confirm both in-zone and out-of-zone branches work and are logged
+- [x] Session model + repository (`sessions` table), load-or-create by phone number
+- [x] FSM driver (`conversation/engine.ts`) — orchestration only, no business logic inline
+- [x] Implement `WELCOME` → `COVERAGE_CHECK` end-to-end first (smallest full-loop slice)
+- [x] Messaging Service wired — real outbound sends, retry/backoff on transient failures, no retry on permanent failures
+- [x] Manual test: message sandbox, get welcome message, reply with a zone, confirm both in-zone and out-of-zone branches work and are logged
 
 **Exit criteria:** two-turn conversation works end-to-end on sandbox, state persists correctly between turns, malformed/unexpected reply falls through to fallback response without crashing.
 
