@@ -4,6 +4,10 @@
     "lib": ["ES2022"],
     "module": "CommonJS",
     "moduleResolution": "Node",
+    // "Node" resolves to the legacy node10 algorithm, deprecated as of TS 5.9 and
+    // removed in TS 7.0. Silencing rather than switching to Node16/NodeNext resolution
+    // — that changes import/extension rules project-wide and isn't a Phase task.
+    "ignoreDeprecations": "5.0",
     "outDir": "dist",
     "strict": true,
     "noUncheckedIndexedAccess": true,
