@@ -163,6 +163,10 @@ export function illegalKeywordTransitionMessage(orderNumber: string, currentStat
   return `Can't update ${orderNumber} right now — current status is "${currentStatus}". Check the order and try again.`;
 }
 
+export function alreadyAtStatusMessage(orderNumber: string, status: string): string {
+  return `${orderNumber} is already marked as ${status} — no changes made.`;
+}
+
 export function keywordNotAllowedForSenderMessage(keyword: string): string {
   return `${keyword} can't be sent from this number. Check the keyword and who's sending it.`;
 }

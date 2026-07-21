@@ -7,6 +7,7 @@
 // transitions all get a clear WhatsApp reply back to whoever sent the message.
 import { saveSession } from '../conversation/session.repository';
 import {
+  alreadyAtStatusMessage,
   illegalKeywordTransitionMessage,
   keywordNotAllowedForSenderMessage,
   MALFORMED_KEYWORD_MESSAGE,
@@ -80,11 +81,14 @@ export async function handleKeywordMessage(
   // idempotent no-op (order.statemachine.ts) — correct for the write itself, but a
   // retried/duplicate keyword must not re-fire the notification fan-out a second time
   // (CLAUDE.md rule 6). Checked here, before the write, using the order already in hand.
+  // The sender still gets a short acknowledgement rather than silence — same reasoning
+  // as the Phase 3 waitlist-decline fix, not a bigger escalation/retry feature.
   if (order.status === rule.targetStatus) {
     logger.info(
       { orderId: order.id, orderNumber: order.orderNumber, status: order.status },
       'Keyword is a no-op — order already at the target status, skipping duplicate notification',
     );
+    await sendMessage({ to: senderPhoneNumber, body: alreadyAtStatusMessage(order.orderNumber, order.status) });
     return;
   }
 

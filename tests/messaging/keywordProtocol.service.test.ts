@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  alreadyAtStatusMessage,
   illegalKeywordTransitionMessage,
   keywordNotAllowedForSenderMessage,
   MALFORMED_KEYWORD_MESSAGE,
@@ -107,14 +108,18 @@ describe('handleKeywordMessage — illegal transitions', () => {
 });
 
 describe('handleKeywordMessage — retried keyword (idempotency)', () => {
-  it('a keyword whose target status matches the order\'s current status is a silent no-op — no transition attempt, no duplicate notification', async () => {
+  it('a keyword whose target status matches the order\'s current status is a no-op (no transition attempt, no duplicate notification) but still acknowledges the sender', async () => {
     findOrderByNumberMock.mockResolvedValue({ ...testOrder, status: 'picked_up' });
 
     await handleKeywordMessage('woshman', '+2348099999999', 'COLLECTED WM-001');
 
     expect(transitionOrderStatusMock).not.toHaveBeenCalled();
     expect(notifyMock).not.toHaveBeenCalled();
-    expect(sendMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).toHaveBeenCalledTimes(1);
+    expect(sendMessageMock).toHaveBeenCalledWith({
+      to: '+2348099999999',
+      body: alreadyAtStatusMessage('WM-001', 'picked_up'),
+    });
   });
 });
 

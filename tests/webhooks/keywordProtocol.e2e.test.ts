@@ -3,6 +3,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { createApp as CreateAppFn } from '../../src/app';
 import {
+  alreadyAtStatusMessage,
   FEEDBACK_PROMPT_MESSAGE,
   outForDeliveryMessage,
   readyForPickupAlertMessage,
@@ -181,13 +182,17 @@ describe('Woshman/partner keyword protocol — full lifecycle through the real w
     expect(history.every((h) => h.changedBy === 'woshman' || h.changedBy === 'partner')).toBe(true);
   });
 
-  it('attempting DELIVERED again after already delivered is rejected as an illegal (idempotent-no-op is same-status only, not a re-deliver)', async () => {
+  it('attempting DELIVERED again after already delivered is a no-op — no duplicate customer notification, but the Woshman gets a short acknowledgement', async () => {
     const res = await postInbound(woshmanPhone, `DELIVERED ${orderNumber} 10pcs`, nextSid());
     expect(res.status).toBe(200);
 
     // Re-sending the exact same target status IS the statemachine's idempotent no-op
-    // (delivered -> delivered), so this succeeds quietly rather than erroring — but it
-    // must not re-notify the customer a second time.
-    expect(sendMock).toHaveBeenCalledTimes(8);
+    // (delivered -> delivered), so this succeeds quietly rather than erroring — it must
+    // not re-notify the customer a second time, but the Woshman still gets told rather
+    // than their message appearing to vanish.
+    expect(sendMock).toHaveBeenCalledTimes(9);
+    expect(sendMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ to: `whatsapp:${woshmanPhone}`, body: alreadyAtStatusMessage(orderNumber, 'delivered') }),
+    );
   });
 });
