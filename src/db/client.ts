@@ -1,4 +1,6 @@
-// Prisma client singleton. Schema source of truth is the root-level prisma/schema.prisma
-// (matches docs/DATABASE_SCHEMA.md) — see note in PR description re: ARCHITECTURE.md §4
-// diagram showing src/db/prisma/schema.prisma. Implemented in Phase 1 (docs/BUILD_SCRIPT.md).
-export {};
+import { PrismaClient } from '@prisma/client';
+
+// Singleton Prisma client. Schema source of truth is the root-level prisma/schema.prisma
+// (matches docs/DATABASE_SCHEMA.md) — see note in the Phase 0 PR re: ARCHITECTURE.md §4
+// showing src/db/prisma/schema.prisma; the working root-level schema is what's real.
+export const prisma = new PrismaClient();
