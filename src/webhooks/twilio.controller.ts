@@ -18,6 +18,7 @@ const inboundSchema = z.object({
   MessageSid: z.string().min(1),
   From: z.string().min(1),
   Body: z.string().optional(),
+  NumMedia: z.string().optional(),
 });
 
 // POST /webhooks/twilio/inbound — customer, Woshman, or partner message.
@@ -32,8 +33,9 @@ export async function handleInboundWebhook(req: Request, res: Response): Promise
     return;
   }
 
-  const { MessageSid, From, Body } = parsed.data;
+  const { MessageSid, From, Body, NumMedia } = parsed.data;
   const phoneNumber = normalizePhoneNumber(From);
+  const hasMedia = Number.parseInt(NumMedia ?? '0', 10) > 0;
 
   let isDuplicate = false;
   try {
@@ -58,7 +60,7 @@ export async function handleInboundWebhook(req: Request, res: Response): Promise
 
   if (!isDuplicate) {
     try {
-      await processInboundMessage(phoneNumber, Body ?? '');
+      await processInboundMessage(phoneNumber, Body ?? '', hasMedia);
     } catch (err) {
       // A conversation-engine failure must never surface as a failed webhook — Twilio
       // would retry the whole delivery, and the inbound message row is already

@@ -20,6 +20,12 @@ const envSchema = z
     JWT_SIGNING_SECRET: z
       .string()
       .min(32, 'JWT_SIGNING_SECRET must be at least 32 characters — long and random, not a phrase'),
+
+    // Real business bank details for the "Bank transfer instructions" copy
+    // (PRD.md §10) — required from Phase 3 onward, since that message can't be sent
+    // without them.
+    BANK_NAME: z.string().min(1, 'BANK_NAME is required'),
+    BANK_ACCOUNT_NUMBER: z.string().min(1, 'BANK_ACCOUNT_NUMBER is required'),
     // Not wired into the code until Phase 7 (error tracking) — optional until then so
     // Phase 1 boot isn't blocked on an unrelated external service being provisioned.
     SENTRY_DSN: z.string().url('SENTRY_DSN must be a valid URL').optional(),
