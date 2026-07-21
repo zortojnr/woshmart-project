@@ -2,7 +2,10 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { processInboundMessage } from '../conversation/engine';
 import { prisma } from '../db/client';
+import { findWoshmanByPhone } from '../domain/woshmen/woshman.service';
+import { findPartnerByPhone } from '../domain/partners/partner.service';
 import { logger } from '../lib/logger';
+import { handleKeywordMessage } from '../messaging/keywordProtocol.service';
 
 const TWIML_EMPTY_RESPONSE = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 
@@ -21,10 +24,10 @@ const inboundSchema = z.object({
   NumMedia: z.string().optional(),
 });
 
-// POST /webhooks/twilio/inbound — customer, Woshman, or partner message.
-// Woshman/partner keyword routing is Phase 4 — every inbound message goes to the
-// customer conversation FSM for now. Validate signature (upstream middleware), dedupe
-// by MessageSid, persist, dispatch to the engine, respond.
+// POST /webhooks/twilio/inbound — customer, Woshman, or partner message. Validate
+// signature (upstream middleware), dedupe by MessageSid, persist, then route: a known
+// Woshman/partner number goes to the keyword protocol, everyone else to the customer
+// conversation FSM (docs/TRD.md §4 sender-type routing).
 export async function handleInboundWebhook(req: Request, res: Response): Promise<void> {
   const parsed = inboundSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -60,14 +63,25 @@ export async function handleInboundWebhook(req: Request, res: Response): Promise
 
   if (!isDuplicate) {
     try {
-      await processInboundMessage(phoneNumber, Body ?? '', hasMedia);
+      const [woshman, partner] = await Promise.all([
+        findWoshmanByPhone(phoneNumber),
+        findPartnerByPhone(phoneNumber),
+      ]);
+
+      if (woshman) {
+        await handleKeywordMessage('woshman', phoneNumber, Body ?? '');
+      } else if (partner) {
+        await handleKeywordMessage('partner', phoneNumber, Body ?? '');
+      } else {
+        await processInboundMessage(phoneNumber, Body ?? '', hasMedia);
+      }
     } catch (err) {
-      // A conversation-engine failure must never surface as a failed webhook — Twilio
-      // would retry the whole delivery, and the inbound message row is already
-      // persisted (idempotency dedupe above would then just skip it next time).
+      // A processing failure must never surface as a failed webhook — Twilio would
+      // retry the whole delivery, and the inbound message row is already persisted
+      // (idempotency dedupe above would then just skip it next time).
       logger.error(
         { err: (err as Error).message, messageSid: MessageSid, phoneNumber },
-        'Conversation engine failed to process inbound message',
+        'Failed to process inbound message',
       );
     }
   }
