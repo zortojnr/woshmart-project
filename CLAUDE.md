@@ -58,6 +58,8 @@ Design every failure path so nothing needs a human at 2AM unless it genuinely ca
 
 ## Workflow expectations
 
+- **Never add Claude as a co-author on commits in this repo.** No `Co-Authored-By: Claude` trailer, regardless of the default commit workflow.
+- **Git identity for this repo is `zortojnr` / `zortorichard27@gmail.com`.** Do not commit as `InfoKW` / `info@kelliworks.com` — that account should not be used to author commits or open PRs on this project. If the local git config or `gh auth` drifts back to it, fix it before committing/opening a PR rather than proceeding.
 - Work through `docs/BUILD_SCRIPT.md` phase by phase, in order, using the ready-to-use prompt provided for each phase. Each phase has an exit criteria — meet it before starting the next phase.
 - **Branch per phase.** Name it `phase-N-<short-name>`. Never commit directly to `main`.
 - **PR per phase (or per meaningful unit of work within a large phase).** Open a PR against `main` with a description covering what was built, what was tested, and what's explicitly deferred. Include manual test transcripts/evidence where the phase calls for a manual staging test.
