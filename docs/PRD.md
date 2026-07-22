@@ -1,3 +1,4 @@
+
 # Woshmart — Product Requirements Document (PRD)
 
 **Status:** Canonical for build. Supersedes any earlier PRD drafts that mention Retool-only-with-Paystack, n8n, or an 8-state lifecycle — this document reflects the confirmed real build.
@@ -228,6 +229,9 @@ Bot declines, offers waitlist. COO not notified unless customer accepts. Accepte
 
 ### 11.2 No-reply timeouts
 See §8 and §10 (timeout messages). No COO notification for a mid-flow timeout; COO is notified once an order is ABANDONED after a payment-window timeout specifically.
+
+### 11.2a Off-topic and unrelated messages (decision confirmed)
+Off-topic messages (questions or content unrelated to laundry ordering) are **not** given dedicated detection or a distinct redirect message. They are handled identically to any other unmatched/unrecognized input mid-flow: the bot re-sends the current stage's question, and 3 consecutive unmatched replies triggers the standard escalation (MENU option + session flagged for COO visibility). This was a deliberate choice, not an oversight — reliably distinguishing "off-topic" from "malformed but on-topic" input is hard to do well with the deterministic FSM this system uses, and building dedicated detection before seeing real pilot transcripts risks solving the wrong problem. Revisit after Phase 8a's supervised pilot provides real examples of what customers actually send, if it turns out to matter in practice.
 
 ### 11.3 Payment verification & disputes
 All verification is manual (no gateway). COO has ~15 minutes to review a submitted receipt before the bot follows up. Wrong-amount transfers: COO contacts customer directly, order stays AWAITING_PAYMENT until resolved.
