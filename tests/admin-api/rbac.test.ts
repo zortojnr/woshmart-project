@@ -81,11 +81,14 @@ async function makeTestPartner() {
 }
 
 describe('Admin API RBAC — write routes', () => {
-  it('PATCH /admin/orders/:id/status — viewer rejected (403), ops allowed', async () => {
+  it('PATCH /admin/orders/:id/status — no token rejected (401), viewer rejected (403), ops allowed', async () => {
     const { order } = await makeTestOrder('paid');
     const viewer = await createTestAdmin('viewer');
     const ops = await createTestAdmin('ops');
     createdAdminIds.push(viewer.admin.id, ops.admin.id);
+
+    const noTokenRes = await request(app).patch(`/admin/orders/${order.id}/status`).send({ status: 'assigned' });
+    expect(noTokenRes.status).toBe(401);
 
     const viewerRes = await request(app)
       .patch(`/admin/orders/${order.id}/status`)
@@ -100,12 +103,17 @@ describe('Admin API RBAC — write routes', () => {
     expect(opsRes.status).toBe(200);
   });
 
-  it('PATCH /admin/orders/:id/assign — viewer rejected (403), ops allowed', async () => {
+  it('PATCH /admin/orders/:id/assign — no token rejected (401), viewer rejected (403), ops allowed', async () => {
     const { order, woshman, partner } = await makeTestOrder('paid');
     const viewer = await createTestAdmin('viewer');
     const ops = await createTestAdmin('ops');
     createdAdminIds.push(viewer.admin.id, ops.admin.id);
 
+    const noTokenRes = await request(app)
+      .patch(`/admin/orders/${order.id}/assign`)
+      .send({ woshmanId: woshman.id, partnerId: partner.id });
+    expect(noTokenRes.status).toBe(401);
+
     const viewerRes = await request(app)
       .patch(`/admin/orders/${order.id}/assign`)
       .set('Authorization', `Bearer ${viewer.token}`)
@@ -119,12 +127,15 @@ describe('Admin API RBAC — write routes', () => {
     expect(opsRes.status).toBe(200);
   });
 
-  it('PATCH /admin/users/:id/flag — viewer rejected (403), ops allowed', async () => {
+  it('PATCH /admin/users/:id/flag — no token rejected (401), viewer rejected (403), ops allowed', async () => {
     const user = await makeTestUser();
     const viewer = await createTestAdmin('viewer');
     const ops = await createTestAdmin('ops');
     createdAdminIds.push(viewer.admin.id, ops.admin.id);
 
+    const noTokenRes = await request(app).patch(`/admin/users/${user.id}/flag`).send({ accountStatus: 'flagged' });
+    expect(noTokenRes.status).toBe(401);
+
     const viewerRes = await request(app)
       .patch(`/admin/users/${user.id}/flag`)
       .set('Authorization', `Bearer ${viewer.token}`)
@@ -138,12 +149,15 @@ describe('Admin API RBAC — write routes', () => {
     expect(opsRes.status).toBe(200);
   });
 
-  it('PATCH /admin/woshmen/:id — viewer rejected (403), ops allowed', async () => {
+  it('PATCH /admin/woshmen/:id — no token rejected (401), viewer rejected (403), ops allowed', async () => {
     const woshman = await makeTestWoshman();
     const viewer = await createTestAdmin('viewer');
     const ops = await createTestAdmin('ops');
     createdAdminIds.push(viewer.admin.id, ops.admin.id);
 
+    const noTokenRes = await request(app).patch(`/admin/woshmen/${woshman.id}`).send({ availability: 'off_duty' });
+    expect(noTokenRes.status).toBe(401);
+
     const viewerRes = await request(app)
       .patch(`/admin/woshmen/${woshman.id}`)
       .set('Authorization', `Bearer ${viewer.token}`)
@@ -157,12 +171,15 @@ describe('Admin API RBAC — write routes', () => {
     expect(opsRes.status).toBe(200);
   });
 
-  it('PATCH /admin/partners/:id — viewer rejected (403), ops allowed', async () => {
+  it('PATCH /admin/partners/:id — no token rejected (401), viewer rejected (403), ops allowed', async () => {
     const partner = await makeTestPartner();
     const viewer = await createTestAdmin('viewer');
     const ops = await createTestAdmin('ops');
     createdAdminIds.push(viewer.admin.id, ops.admin.id);
 
+    const noTokenRes = await request(app).patch(`/admin/partners/${partner.id}`).send({ status: 'warning' });
+    expect(noTokenRes.status).toBe(401);
+
     const viewerRes = await request(app)
       .patch(`/admin/partners/${partner.id}`)
       .set('Authorization', `Bearer ${viewer.token}`)
@@ -176,11 +193,14 @@ describe('Admin API RBAC — write routes', () => {
     expect(opsRes.status).toBe(200);
   });
 
-  it('PATCH /admin/pricing — viewer AND ops both rejected (403), only super_admin allowed', async () => {
+  it('PATCH /admin/pricing — no token rejected (401), viewer AND ops both rejected (403), only super_admin allowed', async () => {
     const viewer = await createTestAdmin('viewer');
     const ops = await createTestAdmin('ops');
     const superAdmin = await createTestAdmin('super_admin');
     createdAdminIds.push(viewer.admin.id, ops.admin.id, superAdmin.admin.id);
+
+    const noTokenRes = await request(app).patch('/admin/pricing').send({ key: 'test.rbac.key', value: { foo: 'bar' } });
+    expect(noTokenRes.status).toBe(401);
 
     const viewerRes = await request(app)
       .patch('/admin/pricing')
@@ -205,11 +225,14 @@ describe('Admin API RBAC — write routes', () => {
     });
   });
 
-  it('POST /admin/messages/send — viewer rejected (403), ops allowed', async () => {
+  it('POST /admin/messages/send — no token rejected (401), viewer rejected (403), ops allowed', async () => {
     const user = await makeTestUser();
     const viewer = await createTestAdmin('viewer');
     const ops = await createTestAdmin('ops');
     createdAdminIds.push(viewer.admin.id, ops.admin.id);
+
+    const noTokenRes = await request(app).post('/admin/messages/send').send({ userId: user.id, body: 'test message' });
+    expect(noTokenRes.status).toBe(401);
 
     const viewerRes = await request(app)
       .post('/admin/messages/send')
