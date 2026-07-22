@@ -170,3 +170,24 @@ export function alreadyAtStatusMessage(orderNumber: string, status: string): str
 export function keywordNotAllowedForSenderMessage(keyword: string): string {
   return `${keyword} can't be sent from this number. Check the keyword and who's sending it.`;
 }
+
+// --- Admin API assignment briefs (docs/TRD.md §5.2 / USER_JOURNEY.md §2, §3) — PRD.md
+// §12 lists these as "dispatch brief" / "job brief" rows but doesn't specify the copy
+// (customer- and Woshman/partner-facing keyword copy above is the same situation), so
+// this is new copy in the same "not from PRD, flagged for review" category. ---
+
+export function woshmanDispatchBriefMessage(input: {
+  orderNumber: string;
+  address: string;
+  landmark: string | null;
+  zone: string;
+  pickupWindow: string | null;
+}): string {
+  const landmarkLine = input.landmark ? ` (landmark: ${input.landmark})` : '';
+  return `New job: ${input.orderNumber} — pickup at ${input.address}${landmarkLine}, ${input.zone}. Window: ${input.pickupWindow ?? 'TBC'}. Reply COLLECTED ${input.orderNumber} once picked up.`;
+}
+
+export function partnerJobBriefMessage(input: { orderNumber: string; serviceType: string; itemsDescription: string | null }): string {
+  const itemsLine = input.itemsDescription ? ` — ${input.itemsDescription}` : '';
+  return `Incoming job: ${input.orderNumber} (${input.serviceType})${itemsLine}. Reply READY ${input.orderNumber} once it's ready for delivery.`;
+}

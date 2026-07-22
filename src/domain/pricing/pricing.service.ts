@@ -1,5 +1,7 @@
 // Bundle lookup, fee calculation, minimum order rule (docs/PRD.md §6). All amounts in
 // kobo (see src/lib/money.ts for the number-vs-BigInt note).
+import type { PricingConfig } from '@prisma/client';
+import { prisma } from '../../db/client';
 import { BUNDLES, type BundleDefinition, type BundleId } from './bundles.config';
 
 export const LOGISTICS_FEE_KOBO = 100_000; // ₦1,000 round-trip pickup + delivery (PRD.md §6.3)
@@ -42,4 +44,24 @@ export function computeQuote(bundleId: BundleId): Quote {
   const grandTotalKobo = serviceTotalKobo + smallBasketFeeKobo + logisticsFeeKobo;
 
   return { bundle, serviceTotalKobo, smallBasketFeeKobo, logisticsFeeKobo, grandTotalKobo };
+}
+
+// docs/TRD.md §5.2 GET/PATCH /admin/pricing — the `pricing_config` table exists from
+// day one but isn't read by computeQuote() above yet (docs/DATABASE_SCHEMA.md: "wired up
+// in Phase 9+"). This is just the storage/API layer Phase 5 asks for; the bundle prices
+// above stay the live source of truth for quotes until that later phase.
+export async function listPricingConfig(): Promise<PricingConfig[]> {
+  return prisma.pricingConfig.findMany({ orderBy: { key: 'asc' } });
+}
+
+export async function findPricingConfigByKey(key: string): Promise<PricingConfig | null> {
+  return prisma.pricingConfig.findUnique({ where: { key } });
+}
+
+export async function upsertPricingConfig(key: string, value: unknown, updatedByAdminId: string): Promise<PricingConfig> {
+  return prisma.pricingConfig.upsert({
+    where: { key },
+    update: { value: value as object, updatedBy: updatedByAdminId },
+    create: { key, value: value as object, updatedBy: updatedByAdminId },
+  });
 }

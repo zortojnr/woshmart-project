@@ -7,7 +7,8 @@ import type { BundleId } from '../pricing/bundles.config';
 import { computeQuote } from '../pricing/pricing.service';
 import { findOrCreateUserByPhone } from '../users/user.service';
 import { createInitiatedOrder } from './order.repository';
-import { transitionOrderStatus } from './order.statemachine';
+import { IllegalOrderTransitionError, transitionOrderStatus } from './order.statemachine';
+import type { ChangedBy, OrderStatus } from './order.types';
 import { resolvePickupDate, type PickupWindowOption } from './pickupWindows.config';
 
 export interface CreateOrderFromQuoteInput {
@@ -75,4 +76,36 @@ export async function flagOrderIssue(orderId: string, note: string, reportedBy: 
   const notes = order.notes ? `${order.notes}\n${entry}` : entry;
 
   return prisma.order.update({ where: { id: orderId }, data: { notes } });
+}
+
+export interface AssignOrderInput {
+  woshmanId: string;
+  partnerId: string;
+}
+
+// docs/TRD.md §5.2 PATCH /admin/orders/:id/assign — "Assign Woshman + partner". Per
+// docs/PRD.md §9, ASSIGNED only follows PAID; assignment while an order is already
+// ASSIGNED (reassigning a Woshman who can't make the job, per USER_JOURNEY.md §2) is
+// also allowed and doesn't change orders.status. Any other current status is rejected —
+// the woshmanId/partnerId columns aren't gated by order.statemachine.ts (only `status`
+// is, per CLAUDE.md rule 4), so this check is what keeps assignment from happening at a
+// nonsensical point in the order lifecycle.
+export async function assignOrder(orderId: string, input: AssignOrderInput, changedBy: ChangedBy): Promise<Order> {
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+  const currentStatus = order.status as OrderStatus;
+
+  if (currentStatus !== 'paid' && currentStatus !== 'assigned') {
+    throw new IllegalOrderTransitionError(orderId, currentStatus, 'assigned');
+  }
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { woshmanId: input.woshmanId, partnerId: input.partnerId },
+  });
+
+  if (currentStatus === 'paid') {
+    return transitionOrderStatus(orderId, 'assigned', changedBy, 'Woshman + partner assigned');
+  }
+
+  return prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 }

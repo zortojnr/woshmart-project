@@ -9,12 +9,26 @@
 // either already handled elsewhere (Phase 3's conversational sends) or have no caller
 // yet (Phase 5 Admin API) — not retrofitted here, to keep this phase's diff scoped to
 // what Phase 4 actually triggers.
-import { FEEDBACK_PROMPT_MESSAGE, outForDeliveryMessage, readyForPickupAlertMessage, STATUS_UPDATE_MESSAGES } from '../../conversation/messages';
+import {
+  dispatchConfirmationMessage,
+  FEEDBACK_PROMPT_MESSAGE,
+  outForDeliveryMessage,
+  partnerJobBriefMessage,
+  readyForPickupAlertMessage,
+  STATUS_UPDATE_MESSAGES,
+  woshmanDispatchBriefMessage,
+} from '../../conversation/messages';
 import { logger } from '../../lib/logger';
 import { sendMessage } from '../../messaging/send.service';
 import { prisma } from '../../db/client';
 
-export type NotificationEvent = 'PICKED_UP' | 'AT_LAUNDRY' | 'READY_FOR_DELIVERY' | 'OUT_FOR_DELIVERY' | 'DELIVERED';
+export type NotificationEvent =
+  | 'PICKED_UP'
+  | 'AT_LAUNDRY'
+  | 'READY_FOR_DELIVERY'
+  | 'OUT_FOR_DELIVERY'
+  | 'DELIVERED'
+  | 'ASSIGNED';
 
 export async function notify(event: NotificationEvent, orderId: string): Promise<void> {
   const order = await prisma.order.findUniqueOrThrow({
@@ -61,5 +75,47 @@ export async function notify(event: NotificationEvent, orderId: string): Promise
       // ("everything else surfaces in Retool/logs for business-hours review").
       logger.info({ orderId, orderNumber: order.orderNumber }, 'Order delivered — COO notified (log)');
       return;
+
+    case 'ASSIGNED':
+      // PRD.md §12 "Bank transfer verified (PAID)" / "COD order confirmed" rows: customer
+      // ✅, Woshman ✅ dispatch brief, partner ✅ job brief. Per USER_JOURNEY.md §2/§3 these
+      // only make sense once a Woshman/partner is actually chosen, so this fires from the
+      // Admin API's assign action (docs/BUILD_SCRIPT.md Phase 5), not from PAID itself —
+      // confirmed as the correct reading during Phase 5 build (PRD's PAID row predates
+      // assignment being modeled as its own later COO action).
+      if (!order.woshman || !order.partner) {
+        logger.error(
+          { orderId, orderNumber: order.orderNumber },
+          'ASSIGNED notification: order missing woshman or partner — cannot notify',
+        );
+        return;
+      }
+      await sendMessage({ to: order.user.phoneNumber, body: dispatchConfirmationMessage(order.woshman.name) });
+      await sendMessage({
+        to: order.woshman.phoneNumber,
+        body: woshmanDispatchBriefMessage({
+          orderNumber: order.orderNumber,
+          address: order.address,
+          landmark: order.landmark,
+          zone: order.zone,
+          pickupWindow: order.pickupWindow,
+        }),
+      });
+      await sendMessage({
+        to: order.partner.phoneNumber,
+        body: partnerJobBriefMessage({
+          orderNumber: order.orderNumber,
+          serviceType: order.serviceType,
+          itemsDescription: order.itemsDescription,
+        }),
+      });
+      return;
   }
+}
+
+// docs/TRD.md §5.2 POST /admin/messages/send — "manual one-off customer message". Not
+// one of the event-driven rows in PRD.md §12's matrix, but still must route through this
+// service and not call the Messaging Service (or Twilio) directly, per CLAUDE.md rule 5.
+export async function sendManualMessage(to: string, body: string): Promise<void> {
+  await sendMessage({ to, body });
 }
