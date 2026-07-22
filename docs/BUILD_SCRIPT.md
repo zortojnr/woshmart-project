@@ -245,13 +245,13 @@ this is merged.
 
 ## Phase 5 — Admin API + Retool
 
-- [ ] Admin auth: login endpoint, JWT issuance, bcrypt/argon2 password hashing
-- [ ] Seed exactly one `super_admin` account manually (no public signup endpoint exists)
-- [ ] `auth.middleware.ts` + `rbac.middleware.ts` wired from the first admin route, not bolted on later
-- [ ] Order endpoints: list/filter, detail, status transition, assignment (`TRD.md` §5.2)
-- [ ] User, Woshmen, Partner CRUD endpoints
-- [ ] `admin_actions` audit logging as middleware — automatic on every write route
-- [ ] Retool app connected to Admin API as a REST resource; core COO screens built (orders, users, woshmen, partners); pages role-gated by `admins.role`
+- [x] Admin auth: login endpoint, JWT issuance, bcrypt/argon2 password hashing
+- [x] Seed exactly one `super_admin` account manually (no public signup endpoint exists)
+- [x] `auth.middleware.ts` + `rbac.middleware.ts` wired from the first admin route, not bolted on later
+- [x] Order endpoints: list/filter, detail, status transition, assignment (`TRD.md` §5.2)
+- [x] User, Woshmen, Partner CRUD endpoints
+- [x] `admin_actions` audit logging as middleware — automatic on every write route
+- [ ] Retool app connected to Admin API as a REST resource; core COO screens built (orders, users, woshmen, partners); pages role-gated by `admins.role` — **not done by this PR**; requires a human with Retool account access, see PR description
 
 **Exit criteria:** a COO-role admin can, entirely from Retool, verify a transfer, mark an order PAID, assign Woshman + partner, and watch correct WhatsApp notifications fire. A `viewer`-role login is provably (tested, not assumed) unable to perform any write action.
 

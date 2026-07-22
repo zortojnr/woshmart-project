@@ -30,3 +30,10 @@ export class BadRequestError extends AppError {
     this.name = 'BadRequestError';
   }
 }
+
+export class NotFoundError extends AppError {
+  constructor(message = 'Not found') {
+    super(message, 404);
+    this.name = 'NotFoundError';
+  }
+}

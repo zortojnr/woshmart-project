@@ -1,3 +1,4 @@
+
 # CLAUDE.md
 
 This file is read by Claude Code at the start of every session in this repo. Follow it exactly. If something here conflicts with a request in chat, follow this file and flag the conflict — don't silently pick one.

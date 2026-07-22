@@ -1,7 +1,8 @@
-// Order persistence (Prisma). Order creation only — status writes go exclusively
-// through order.statemachine.ts (CLAUDE.md rule 4), never through this file.
+// Order persistence (Prisma). Status writes go exclusively through
+// order.statemachine.ts (CLAUDE.md rule 4), never through this file.
 import type { Order, Prisma } from '@prisma/client';
 import { prisma } from '../../db/client';
+import type { OrderStatus } from './order.types';
 
 const ORDER_NUMBER_CREATION_ATTEMPTS = 3;
 
@@ -83,4 +84,39 @@ export async function createInitiatedOrder(input: CreateInitiatedOrderInput): Pr
   }
 
   throw lastError;
+}
+
+export interface OrderListFilters {
+  status?: OrderStatus | undefined;
+  zone?: string | undefined;
+  woshmanId?: string | undefined;
+  partnerId?: string | undefined;
+}
+
+// docs/TRD.md §5.2 GET /admin/orders — "List/filter orders". Newest first; no pagination
+// specified, so none added speculatively (CLAUDE.md rule 10).
+export async function listOrders(filters: OrderListFilters) {
+  return prisma.order.findMany({
+    where: {
+      ...(filters.status !== undefined ? { status: filters.status } : {}),
+      ...(filters.zone !== undefined ? { zone: filters.zone } : {}),
+      ...(filters.woshmanId !== undefined ? { woshmanId: filters.woshmanId } : {}),
+      ...(filters.partnerId !== undefined ? { partnerId: filters.partnerId } : {}),
+    },
+    include: { user: true, woshman: true, partner: true },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+// docs/TRD.md §5.2 GET /admin/orders/:id — "Order detail + status history".
+export async function getOrderDetail(id: string) {
+  return prisma.order.findUnique({
+    where: { id },
+    include: {
+      user: true,
+      woshman: true,
+      partner: true,
+      statusHistory: { orderBy: { createdAt: 'asc' } },
+    },
+  });
 }
