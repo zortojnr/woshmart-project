@@ -14,6 +14,7 @@ import {
   FEEDBACK_PROMPT_MESSAGE,
   outForDeliveryMessage,
   partnerJobBriefMessage,
+  PAYMENT_WINDOW_ABANDONED_MESSAGE,
   readyForPickupAlertMessage,
   STATUS_UPDATE_MESSAGES,
   woshmanDispatchBriefMessage,
@@ -28,7 +29,8 @@ export type NotificationEvent =
   | 'READY_FOR_DELIVERY'
   | 'OUT_FOR_DELIVERY'
   | 'DELIVERED'
-  | 'ASSIGNED';
+  | 'ASSIGNED'
+  | 'PAYMENT_WINDOW_ABANDONED';
 
 export async function notify(event: NotificationEvent, orderId: string): Promise<void> {
   const order = await prisma.order.findUniqueOrThrow({
@@ -109,6 +111,17 @@ export async function notify(event: NotificationEvent, orderId: string): Promise
           itemsDescription: order.itemsDescription,
         }),
       });
+      return;
+
+    case 'PAYMENT_WINDOW_ABANDONED':
+      // PRD.md §11.2/§12: the 60-min payment-window timeout gets a customer message
+      // AND a COO notification — unlike the 30-min quote-timeout, which PRD.md §11.2
+      // explicitly says gets no COO notification at all (handled outside notify(),
+      // see sessionTimeout.job.ts, since no order exists yet at that stage). No real
+      // COO WhatsApp channel exists yet — informational logging is the interim
+      // equivalent, matching the same precedent as DELIVERED above.
+      await sendMessage({ to: order.user.phoneNumber, body: PAYMENT_WINDOW_ABANDONED_MESSAGE });
+      logger.info({ orderId, orderNumber: order.orderNumber }, 'Order abandoned after payment-window timeout — COO notified (log)');
       return;
   }
 }

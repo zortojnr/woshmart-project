@@ -300,13 +300,13 @@ Do not merge until CI is green. Do not proceed to Phase 6 until this is merged.
 
 ## Phase 6 — Timeouts, sweeps, resilience
 
-- [ ] BullMQ setup, Redis-backed
-- [ ] 30-minute quote-abandon job, 60-minute payment-window-abandon job (`PRD.md` §8) — scheduled on entry to the relevant state, cancelled on normal progression
-- [ ] 24-hour auto-close job
-- [ ] Dead-letter handling for jobs that fail repeatedly — logged loudly, not retried forever, not silently dropped
-- [ ] Idempotency review pass across every mutation path — webhook retries, job retries, admin double-clicks all safe to repeat
+- [x] BullMQ setup, Redis-backed
+- [x] 30-minute quote-abandon job, 60-minute payment-window-abandon job (`PRD.md` §8) — scheduled on entry to the relevant state, cancelled on normal progression
+- [x] 24-hour auto-close job
+- [x] Dead-letter handling for jobs that fail repeatedly — logged loudly, not retried forever, not silently dropped
+- [x] Idempotency review pass across every mutation path — webhook retries, job retries, admin double-clicks all safe to repeat
 
-**Exit criteria:** kill the process mid-conversation on staging, restart, confirm sessions resume correctly and no timeout job fires twice or gets lost.
+**Exit criteria:** kill the process mid-conversation on staging, restart, confirm sessions resume correctly and no timeout job fires twice or gets lost. **Verified for real on staging** by the human tester (2026-07-23): a live WhatsApp conversation reached `PAYMENT_METHOD` ("How are you paying?") at 20:39, the Web Service was restarted via Render's Restart Service, and the reply sent at 20:53 (a 14-minute gap) correctly produced the exact right quote (Starter Bundle, ₦2,000 + ₦1,000 logistics = ₦3,000) rather than a reset to `WELCOME` — confirming the session resumed from Postgres correctly across a real process restart. Not independently observable by Claude Code (no access to Render or the tester's WhatsApp conversation); this records the tester's own account, same distinction as Phase 5's Retool walkthrough. The earlier local kill/restart proxy (see PR #17) additionally confirmed the scheduled job itself (not just the session) survives a restart without duplicating or being lost.
 
 **Prompt for Claude Code — Phase 6:**
 ```
