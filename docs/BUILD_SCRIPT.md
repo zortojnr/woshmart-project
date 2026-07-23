@@ -466,5 +466,6 @@ Do not start these speculatively — they're listed for visibility, not as a que
 - [ ] Google Maps zone verification — only if keyword-matching starts missing too often in practice
 - [ ] Multi-instance backend behind a load balancer — only if a single instance is demonstrably maxed
 - [ ] Read replica for Retool reporting — only if Retool queries start impacting write-path latency
+- [ ] Admin write path for `partners.outstandingBalanceKobo` and `partners.lastRating` — `PATCH /admin/partners/:id` (Phase 5) doesn't accept either field; there's currently no way to record a partner's balance owed or rating through the Admin API at all, Retool included
 
 Before starting anything in this section, confirm it's actually needed against real usage data, not just "nice to have."
