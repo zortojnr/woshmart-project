@@ -9,6 +9,15 @@ import IORedis from 'ioredis';
 import { Queue, Worker, type Job, type Processor } from 'bullmq';
 import { env } from '../config/env';
 import { logger } from '../lib/logger';
+import { sendUrgentAlertEmail } from '../lib/alertEmail';
+import { PAYMENT_ABANDON_JOB_NAME } from './jobIds';
+
+// Job names whose permanent failure represents the payment/data-integrity class of
+// issue CLAUDE.md's alerting philosophy reserves urgent paging for — a dead-lettered
+// payment-abandon job means an order can be stuck in awaiting_payment indefinitely with
+// no automatic resolution either way. Deliberately a short, explicit list, not "every
+// job" — everything else stays log/Retool-only by design.
+const PAGE_ON_DEAD_LETTER = new Set<string>([PAYMENT_ABANDON_JOB_NAME]);
 
 export const JOBS_QUEUE_NAME = 'woshmart-jobs';
 
@@ -106,6 +115,15 @@ export function logJobFailure(job: Job, err: Error): void {
       { jobId: job.id, name: job.name, data: job.data, attemptsMade: job.attemptsMade, err: err.message },
       'Job exhausted all retry attempts — dead-lettered, needs manual review',
     );
+
+    if (PAGE_ON_DEAD_LETTER.has(job.name)) {
+      // sendUrgentAlertEmail never rejects — it logs and swallows its own failures —
+      // so this is fire-and-forget from a synchronous event listener by design.
+      void sendUrgentAlertEmail(
+        `Job dead-lettered: ${job.name}`,
+        `Job "${job.name}" (id ${job.id}) exhausted all retry attempts.\n\nLast error: ${err.message}\n\nThis job type transitions order payment state — check the order referenced in its data and resolve manually.`,
+      );
+    }
   } else {
     logger.warn(
       { jobId: job.id, name: job.name, attemptsMade: job.attemptsMade, err: err.message },

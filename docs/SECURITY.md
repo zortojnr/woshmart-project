@@ -97,6 +97,41 @@ Standalone security reference. `TRD.md` §7 and `CLAUDE.md`'s non-negotiable rul
 - `order_status_history` independently records every status transition regardless of trigger source, giving a second, order-centric audit trail alongside the admin-centric one.
 - Audit data itself is retained at least as long as the underlying order data it references.
 
+### 3.9 Backups & disaster recovery (Render Postgres)
+
+Both staging (`woshmart-staging-db`) and production Postgres run on Render Postgres, not Neon (Neon is local-dev only) — the procedure below is Render-specific, not what a Neon/RDS runbook would say.
+
+**Confirming backups are active** (requires Render dashboard access — not something this codebase can verify on its own):
+
+1. Render Dashboard → the Postgres instance → **Backups** tab.
+2. Automated daily backups require a paid plan (Starter or above) — the free tier does not include them. Confirm the instance is on a plan that has this enabled.
+3. Confirm retention meets the `TRD.md` §7 minimum (7 days; 30 preferred). Render's higher-tier plans also offer point-in-time recovery (PITR) within the retention window, not just daily snapshot points — confirm which mode the current plan gives you, since the restore procedure differs slightly (snapshot vs. arbitrary timestamp).
+
+**Restore procedure** (also requires dashboard access — perform this on staging, never as a live experiment against production):
+
+1. Render Dashboard → the Postgres instance → **Backups** tab → pick a backup point (or, on a PITR-capable plan, an arbitrary timestamp).
+2. Choose **Restore**. Render does **not** restore in place — it provisions a **new** database instance from that backup point, leaving the original untouched. You get a new connection string for the restored instance.
+3. Point a throwaway `DATABASE_URL` (never staging's or production's live one) at the new instance and spot-check known data — e.g. row counts on `orders`/`users`, or a specific order by its `order_number` — to confirm the restore is actually usable, not just "completed" in the dashboard.
+4. Delete the scratch restored instance once verified, so it doesn't sit around as an unmonitored, unpatched copy of real data.
+5. Record the date, backup point restored, and what was verified — this is the evidence that the restore procedure actually works, not just that the docs describe one.
+
+This last step (actually performing a test restore) needs to be done by whoever holds Render dashboard access — it isn't something achievable from within this repo/session. Once done, record the result here and in the `BUILD_SCRIPT.md` Phase 7 checklist.
+
+### 3.10 Alerting (Render's built-in notifications)
+
+Per `CLAUDE.md`'s alerting philosophy, urgent/paging notifications are reserved for **API fully down**, **DB unreachable**, and **payment/data-integrity issues** — everything else stays in logs/Retool for business-hours review. Render's own dashboard can directly cover the first two; the third needs an application-level signal, since Render has no visibility into business logic.
+
+**API fully down** — Render Dashboard → the Web Service → **Settings** → **Health & Alerts**:
+- Confirm the health check path is set to `/health` (already implemented — checks both DB and Redis).
+- Enable notifications for **"Health Check Failed"** / **service marked unhealthy**. Render debounces this internally (a few consecutive failed checks, not one blip) before marking a service unhealthy, which is what keeps a single transient failure from paging anyone — that debounce is Render's own behavior, not something configured here.
+- Enable notifications for **"Deploy failed"** — a bad deploy that never goes live is functionally the same as an outage.
+
+**DB unreachable** — Render Dashboard → the Postgres instance → **Settings** → **Alerts**:
+- Enable the **"Database unavailable"** notification.
+- CPU/memory/disk-usage threshold alerts are also available here — per the alerting philosophy, treat these as *trend* signals (business-hours review), not urgent pages, unless Render's own alert explicitly indicates the instance is down/unreachable, not just under load.
+
+**Payment/data-integrity issues** — not something Render's dashboard can see. Handled at the application level instead: `src/jobs/queue.ts`'s `logJobFailure` sends a dedicated urgent alert email (via `src/lib/alertEmail.ts`, configured through the `ALERT_SMTP_*`/`ALERT_EMAIL_TO` environment variables) specifically when the `payment-abandon` job — the one whose permanent failure can leave an order stuck in `awaiting_payment` indefinitely — exhausts all its retries. Deliberately narrow: this is not a general alerting platform, it's the one category CLAUDE.md calls out as deserving a real page. A single retryable failure of that same job (attempts remaining) does *not* trigger the email — covered by `tests/jobs/queue.deadLetter.test.ts`'s "does not send the urgent alert email while retries remain" test, which is the explicit "a single transient failure does not page" verification `BUILD_SCRIPT.md` Phase 7 item 8 asks for.
+
 ## 4. Incident response
 
 This is intentionally lightweight — sized for a small team running a regional MVP, not an enterprise IR program. The point is having *something* written down before an incident, not building process for its own sake.
@@ -140,18 +175,18 @@ Woshmart is an internal operational system, not a public-facing product with an 
 
 Consolidated from `BUILD_SCRIPT.md` Phase 7 — the concrete list to walk through before Phase 8 (launch):
 
-- [ ] Twilio signature validation confirmed against the exact production URL/protocol/path
-- [ ] Per-number, global, and Admin API rate limiting active and tested
-- [ ] Every Admin API route has Zod input validation
-- [ ] No currency field or calculation uses float/NUMERIC — integer kobo confirmed everywhere
-- [ ] Git history swept for committed secrets — none found (or found-and-rotated)
-- [ ] Logs at `info` level reviewed for PII — none beyond IDs/references
-- [ ] Automated daily backups confirmed active, point-in-time recovery enabled, one test restore actually performed
-- [ ] Error tracking wired and confirmed capturing a real test exception
-- [ ] Alert thresholds configured per the alerting philosophy in `CLAUDE.md` — confirmed not to fire on normal transient blips
-- [ ] RBAC explicitly tested: a `viewer` token cannot perform any write action, an `ops` token cannot touch pricing config
-- [ ] `admin_actions` audit logging confirmed on every write route, not just spot-checked
-- [ ] `orders.status` confirmed to have exactly one writer across the whole codebase
-- [ ] Production and staging confirmed fully isolated — no shared secrets, database, or Twilio sender
-- [ ] Data retention policy decided and documented (even if the enforcement job is a Phase 9+ item)
+- [ ] Twilio signature validation confirmed against the exact production URL/protocol/path — **not done in Phase 7**: requires real production Twilio console access, which this session doesn't have; confirm directly once production is provisioned.
+- [x] Per-number, global, and Admin API rate limiting active and tested (`src/webhooks/rateLimit.middleware.ts`, `src/admin-api/middleware/rateLimit.middleware.ts`, `src/lib/rateLimiter.ts`; outbound throttle in `src/messaging/send.service.ts`)
+- [x] Every Admin API route has Zod input validation (audited Phase 7 — every route taking a body already had one; no gaps found)
+- [x] No currency field or calculation uses float/NUMERIC — integer kobo confirmed everywhere (swept Phase 7 — clean)
+- [x] Git history swept for committed secrets — none found (swept Phase 7 — only `.env.example` and fake/local-only placeholder values in git history, no real credential ever committed)
+- [x] Logs at `info` level reviewed for PII — one gap found and fixed (`src/conversation/states/quote.ts` was logging the full session context, including the customer's raw address, at error level; now logs only which fields are missing)
+- [ ] Automated daily backups confirmed active, point-in-time recovery enabled, one test restore actually performed — **needs Render dashboard access**, see §3.9. Procedure documented; execution and result pending.
+- [x] Error tracking wired (`@sentry/node` via `src/lib/sentry.ts`) and confirmed capturing a real test exception (`tests/admin-api/diagnostics.test.ts`, against a mocked Sentry module) — **end-to-end capture against a real Sentry project still pending** a real `SENTRY_DSN`, which hasn't been provisioned yet.
+- [x] Alert thresholds configured per the alerting philosophy in `CLAUDE.md` — confirmed not to fire on normal transient blips. Render-side steps documented in §3.10 (needs dashboard access to actually enable); the one application-level alert (payment-abandon dead-letter email) is wired and its "does not fire on a single transient failure" behavior is unit-tested.
+- [x] RBAC explicitly tested: a `viewer` token cannot perform any write action, an `ops` token cannot touch pricing config (pre-existing Phase 5 coverage — spot-checked, still correct)
+- [x] `admin_actions` audit logging confirmed on every write route, not just spot-checked (pre-existing `auditGuardMiddleware`, reviewed Phase 6/7)
+- [x] `orders.status` confirmed to have exactly one writer across the whole codebase (`order.statemachine.ts`'s `transitionOrderStatus` — reconfirmed Phase 7)
+- [ ] Production and staging confirmed fully isolated — no shared secrets, database, or Twilio sender — **not verifiable from this session**; confirm directly against the actual Render/Twilio configuration.
+- [ ] Data retention policy decided and documented (even if the enforcement job is a Phase 9+ item) — not addressed in Phase 7, remains open.
 - [ ] This document reviewed by a second person before go-live, not just the person who built the system

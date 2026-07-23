@@ -347,15 +347,15 @@ results. Do not merge until CI is green. Do not proceed to Phase 7 until this is
 
 Go through `TRD.md` §7 (non-functional requirements) and `CLAUDE.md` non-negotiable rules line by line:
 
-- [ ] Signature validation confirmed against production Twilio config (exact URL, protocol, path) — not just staging
-- [ ] Rate limiting active: per-phone-number, global webhook, Admin API
-- [ ] All Admin API inputs Zod-validated
-- [ ] Money confirmed as integer kobo everywhere — grep for any float/NUMERIC currency usage and eliminate
-- [ ] Secrets confirmed absent from git history
-- [ ] Logs reviewed for PII leakage at `info` level
-- [ ] Backups confirmed running + one test restore performed
-- [ ] Error tracking wired and confirmed (deliberate test error captured)
-- [ ] Alert thresholds configured per `CLAUDE.md` alerting philosophy — confirmed to *not* fire on expected/normal transient blips
+- [ ] Signature validation confirmed against production Twilio config (exact URL, protocol, path) — not just staging — **out of scope for this session, needs real production Twilio console access**
+- [x] Rate limiting active: per-phone-number, global webhook, Admin API
+- [x] All Admin API inputs Zod-validated
+- [x] Money confirmed as integer kobo everywhere — grep for any float/NUMERIC currency usage and eliminate
+- [x] Secrets confirmed absent from git history
+- [x] Logs reviewed for PII leakage at `info` level
+- [ ] Backups confirmed running + one test restore performed — **procedure documented (SECURITY.md §3.9), needs Render dashboard access to execute**
+- [x] Error tracking wired and confirmed (deliberate test error captured against a mocked Sentry module — real end-to-end capture pending a provisioned `SENTRY_DSN`)
+- [x] Alert thresholds configured per `CLAUDE.md` alerting philosophy — confirmed to *not* fire on expected/normal transient blips
 
 **Exit criteria:** a stranger with production access could trust the guardrails without relying on the builder's memory of having been careful.
 

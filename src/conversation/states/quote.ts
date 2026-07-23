@@ -50,7 +50,22 @@ export const quoteHandler: StateHandler = {
     }
 
     if (!hasCompleteOrderDraft(context)) {
-      logger.error({ phoneNumber: ctx.phoneNumber, context }, 'QUOTE_PENDING YES with an incomplete order draft — cannot create order');
+      // Log which fields are missing, not the context itself — it can hold the
+      // customer's street address, which has no reason to sit in a long-retention
+      // log at error level (docs/TRD.md §7 PII handling).
+      logger.error(
+        {
+          phoneNumber: ctx.phoneNumber,
+          missingFields: {
+            area: !context.area,
+            bundleId: !context.bundleId,
+            address: !context.address,
+            pickupWindowId: !context.pickupWindowId,
+            paymentMethod: !context.paymentMethod,
+          },
+        },
+        'QUOTE_PENDING YES with an incomplete order draft — cannot create order',
+      );
       return { nextState: 'IDLE', nextContext: {}, outboundMessages: [] };
     }
 

@@ -42,6 +42,25 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Outbound throttle (docs/BUILD_SCRIPT.md Phase 7 item 1): a new/unrated WhatsApp
+// sender is limited by Twilio/Meta to roughly one message per second — this module is
+// the only code path that ever calls Twilio's send API (CLAUDE.md rule 5), so a single
+// in-process minimum-interval gate is enough to enforce that across every send,
+// without needing distributed coordination. (If this service is ever scaled to
+// multiple instances, this would need to move to a shared Redis-backed limiter — not
+// needed at current single-instance, low-hundreds-of-orders/month scale.)
+const MIN_SEND_INTERVAL_MS = 1000;
+let nextSendSlotAt = 0;
+
+async function waitForSendSlot(): Promise<void> {
+  const now = Date.now();
+  const waitMs = nextSendSlotAt - now;
+  nextSendSlotAt = Math.max(now, nextSendSlotAt) + MIN_SEND_INTERVAL_MS;
+  if (waitMs > 0) {
+    await sleep(waitMs);
+  }
+}
+
 function toWhatsAppAddress(phoneNumber: string): string {
   return phoneNumber.startsWith('whatsapp:') ? phoneNumber : `whatsapp:${phoneNumber}`;
 }
@@ -68,6 +87,7 @@ export async function sendMessage({ to, body }: SendMessageInput): Promise<SendM
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
+      await waitForSendSlot();
       const message = await twilioClient.messages.create({
         from: env.TWILIO_WHATSAPP_NUMBER,
         to: toAddress,
