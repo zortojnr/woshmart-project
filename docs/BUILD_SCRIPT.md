@@ -300,13 +300,13 @@ Do not merge until CI is green. Do not proceed to Phase 6 until this is merged.
 
 ## Phase 6 — Timeouts, sweeps, resilience
 
-- [ ] BullMQ setup, Redis-backed
-- [ ] 30-minute quote-abandon job, 60-minute payment-window-abandon job (`PRD.md` §8) — scheduled on entry to the relevant state, cancelled on normal progression
-- [ ] 24-hour auto-close job
-- [ ] Dead-letter handling for jobs that fail repeatedly — logged loudly, not retried forever, not silently dropped
-- [ ] Idempotency review pass across every mutation path — webhook retries, job retries, admin double-clicks all safe to repeat
+- [x] BullMQ setup, Redis-backed
+- [x] 30-minute quote-abandon job, 60-minute payment-window-abandon job (`PRD.md` §8) — scheduled on entry to the relevant state, cancelled on normal progression
+- [x] 24-hour auto-close job
+- [x] Dead-letter handling for jobs that fail repeatedly — logged loudly, not retried forever, not silently dropped
+- [x] Idempotency review pass across every mutation path — webhook retries, job retries, admin double-clicks all safe to repeat
 
-**Exit criteria:** kill the process mid-conversation on staging, restart, confirm sessions resume correctly and no timeout job fires twice or gets lost.
+**Exit criteria:** kill the process mid-conversation on staging, restart, confirm sessions resume correctly and no timeout job fires twice or gets lost. **Verified locally as a proxy** (real staging kill/restart still needs to be run by a human against the actual staging deployment, same distinction as Phase 5's Retool walkthrough) — see PR for the transcript.
 
 **Prompt for Claude Code — Phase 6:**
 ```
