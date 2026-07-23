@@ -24,7 +24,8 @@
     "prisma:migrate": "prisma migrate dev",
     "seed:super-admin": "tsx scripts/seed-super-admin.ts",
     "seed:test-order": "tsx scripts/seed-test-order.ts",
-    "seed:test-woshman-partner": "tsx scripts/seed-test-woshman-partner.ts"
+    "seed:test-woshman-partner": "tsx scripts/seed-test-woshman-partner.ts",
+    "delete:test-woshman-partner": "tsx scripts/delete-test-woshman-partner.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
