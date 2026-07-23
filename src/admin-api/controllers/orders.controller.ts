@@ -131,13 +131,26 @@ export async function assign(req: AuthenticatedRequest, res: Response): Promise<
     after: { status: updated.status, woshmanId: updated.woshmanId, partnerId: updated.partnerId },
   });
 
-  // The assignment write already succeeded — a notification failure (Twilio down, etc.)
-  // must not turn a successful assign into an error response. Logged and surfaced for
-  // business-hours review, per CLAUDE.md's alerting philosophy, not retried inline here.
-  try {
-    await notify('ASSIGNED', orderId);
-  } catch (err) {
-    logger.error({ err: (err as Error).message, orderId }, 'ASSIGNED notification failed after successful order assignment');
+  // Idempotency (docs/BUILD_SCRIPT.md Phase 6 item 5): a double-click/retry on this
+  // route must not re-send the dispatch confirmation / dispatch brief / job brief.
+  // assignOrder() itself already tolerates a same-values retry without error, but the
+  // notification isn't gated on anything having actually changed — only fire it when
+  // the assignment is new or the Woshman/partner actually changed, not on every
+  // successful call regardless of whether this is the first assignment or a repeat.
+  const assignmentChanged = before.woshmanId !== updated.woshmanId || before.partnerId !== updated.partnerId;
+
+  if (assignmentChanged) {
+    // The assignment write already succeeded — a notification failure (Twilio down,
+    // etc.) must not turn a successful assign into an error response. Logged and
+    // surfaced for business-hours review, per CLAUDE.md's alerting philosophy, not
+    // retried inline here.
+    try {
+      await notify('ASSIGNED', orderId);
+    } catch (err) {
+      logger.error({ err: (err as Error).message, orderId }, 'ASSIGNED notification failed after successful order assignment');
+    }
+  } else {
+    logger.info({ orderId }, 'Assign called with the same Woshman + partner already assigned — skipping duplicate notification');
   }
 
   res.status(200).json({ order: updated });
