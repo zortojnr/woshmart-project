@@ -4,6 +4,18 @@
 import type { Order } from '@prisma/client';
 import { prisma } from '../../db/client';
 import { logger } from '../../lib/logger';
+import {
+  AUTO_CLOSE_DELAY_MS,
+  AUTO_CLOSE_JOB_NAME,
+  autoCloseJobId,
+  PAYMENT_ABANDON_DELAY_MS,
+  PAYMENT_ABANDON_JOB_NAME,
+  paymentAbandonJobId,
+  PAYMENT_REMINDER_DELAY_MS,
+  PAYMENT_REMINDER_JOB_NAME,
+  paymentReminderJobId,
+} from '../../jobs/jobIds';
+import { cancelJob, scheduleJob } from '../../jobs/queue';
 import type { ChangedBy, OrderStatus } from './order.types';
 
 const LEGAL_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -41,9 +53,12 @@ export async function transitionOrderStatus(
   changedBy: ChangedBy,
   note?: string,
 ): Promise<Order> {
-  return prisma.$transaction(async (tx) => {
+  let previousStatus: OrderStatus | undefined;
+
+  const updated = await prisma.$transaction(async (tx) => {
     const order = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
     const fromStatus = order.status as OrderStatus;
+    previousStatus = fromStatus;
 
     if (fromStatus === toStatus) {
       logger.info({ orderId, status: toStatus }, 'Order status transition is a no-op — already at target status');
@@ -59,11 +74,43 @@ export async function transitionOrderStatus(
       throw new IllegalOrderTransitionError(orderId, fromStatus, toStatus);
     }
 
-    const updated = await tx.order.update({ where: { id: orderId }, data: { status: toStatus } });
+    const updatedOrder = await tx.order.update({ where: { id: orderId }, data: { status: toStatus } });
     await tx.orderStatusHistory.create({
       data: { orderId, fromStatus, toStatus, changedBy, note: note ?? null },
     });
 
-    return updated;
+    return updatedOrder;
   });
+
+  // Job scheduling happens after the transaction commits, and only on a REAL
+  // transition (not the same-status no-op above, where previousStatus === toStatus) —
+  // this function's own idempotency (a repeat call with the same toStatus is a safe
+  // no-op) combined with scheduleJob/cancelJob's own idempotency (deterministic jobId)
+  // means a retried caller never produces duplicate jobs either way (CLAUDE.md rule 6).
+  if (previousStatus !== undefined && previousStatus !== toStatus) {
+    await handlePostTransitionJobs(orderId, previousStatus, toStatus);
+  }
+
+  return updated;
+}
+
+// docs/PRD.md §8 payment window + docs/BUILD_SCRIPT.md Phase 6 auto-close. Schedules
+// and cancellations live here, not in the job files themselves, so every caller of
+// transitionOrderStatus (order creation, the keyword protocol, the Admin API) gets
+// this for free without each needing its own copy of this logic.
+async function handlePostTransitionJobs(orderId: string, fromStatus: OrderStatus, toStatus: OrderStatus): Promise<void> {
+  if (toStatus === 'awaiting_payment') {
+    await Promise.all([
+      scheduleJob(PAYMENT_REMINDER_JOB_NAME, paymentReminderJobId(orderId), { orderId }, PAYMENT_REMINDER_DELAY_MS),
+      scheduleJob(PAYMENT_ABANDON_JOB_NAME, paymentAbandonJobId(orderId), { orderId }, PAYMENT_ABANDON_DELAY_MS),
+    ]);
+  } else if (fromStatus === 'awaiting_payment') {
+    await Promise.all([cancelJob(paymentReminderJobId(orderId)), cancelJob(paymentAbandonJobId(orderId))]);
+  }
+
+  if (toStatus === 'delivered') {
+    await scheduleJob(AUTO_CLOSE_JOB_NAME, autoCloseJobId(orderId), { orderId }, AUTO_CLOSE_DELAY_MS);
+  } else if (fromStatus === 'delivered') {
+    await cancelJob(autoCloseJobId(orderId));
+  }
 }

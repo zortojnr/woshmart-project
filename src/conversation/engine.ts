@@ -1,3 +1,4 @@
+import { cancelQuoteTimeoutJob, scheduleQuoteTimeoutJob } from '../jobs/sessionTimeout.job';
 import { logger } from '../lib/logger';
 import { sendMessage } from '../messaging/send.service';
 import { MEDIA_NOT_SUPPORTED_MESSAGE } from './messages';
@@ -72,6 +73,17 @@ export async function processInboundMessage(
     : result.nextContext;
 
   await saveSession(phoneNumber, result.nextState, nextContext);
+
+  // 30-min quote-abandon timeout (docs/PRD.md §8): scheduled/cancelled by state
+  // transition, not by order status — no order exists yet at QUOTE_PENDING
+  // (order.service.ts creates the order only on YES). A deterministic jobId makes
+  // re-entering QUOTE_PENDING via an unmatched reply a no-op, not a reset of the
+  // 30-minute window, so this runs unconditionally rather than only on the first entry.
+  if (result.nextState === 'QUOTE_PENDING') {
+    await scheduleQuoteTimeoutJob(phoneNumber);
+  } else if (ctx.state === 'QUOTE_PENDING') {
+    await cancelQuoteTimeoutJob(phoneNumber);
+  }
 
   for (const message of result.outboundMessages) {
     await sendMessage({ to: phoneNumber, body: message.body });

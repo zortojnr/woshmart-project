@@ -133,6 +133,12 @@ export const FEEDBACK_RESPONSE_MESSAGES = {
 export const QUOTE_TIMEOUT_MESSAGE = 'Your order has timed out. Message us anytime to start again.';
 export const PAYMENT_REMINDER_MESSAGE = 'Did your transfer go through? Reply with your receipt when ready.';
 
+// PRD.md §10 gives copy for the 30-min quote-abandon and 45-min payment-reminder, but
+// not for the 60-min payment-window expiry itself (docs/BUILD_SCRIPT.md Phase 6) —
+// exact wording confirmed directly with the user to fill that gap, not invented here.
+export const PAYMENT_WINDOW_ABANDONED_MESSAGE =
+  "We didn't receive your payment confirmation in time, so this order has been cancelled. If you already sent a transfer, please don't worry, message us with your receipt and we'll sort it out. Otherwise, feel free to start a new order anytime.";
+
 // --- Fallback / operational copy (not in PRD.md §10 — PRD has no specified copy for
 // unmatched-input handling, so this is new, minimal, and flagged for a copy review
 // rather than silently treated as "PRD-equivalent" text). ---
