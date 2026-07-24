@@ -31,12 +31,18 @@ const TOTAL_LIFESPAN_DAYS = EXPIRATION_DAYS + GRACE_PERIOD_DAYS;
 // reminder.
 const REMINDER_STARTS_AT_DAY = 28;
 
-async function getEffectiveCreatedAt(databaseUrl: string): Promise<Date> {
+// Exported for tests — this is the one function whose failure mode (crash vs. clear
+// error vs. silently wrong date) actually matters, since it's what the whole
+// self-updating mechanism depends on.
+export async function getEffectiveCreatedAt(databaseUrl: string): Promise<Date> {
   const prisma = new PrismaClient({ datasourceUrl: databaseUrl });
   try {
     const rows = await prisma.$queryRaw<{ created_at: Date | null }[]>`
       SELECT MIN(started_at) AS created_at FROM _prisma_migrations
     `;
+    // MIN() over zero rows returns exactly one row shaped { created_at: null }, not
+    // zero rows — confirmed against a real empty table, not assumed. `rows[0]?.` is
+    // still there as a defensive fallback in case a driver ever behaves differently.
     const createdAt = rows[0]?.created_at;
     if (!createdAt) {
       throw new Error('_prisma_migrations has no rows — has `prisma migrate deploy` ever run against this database?');
@@ -47,11 +53,11 @@ async function getEffectiveCreatedAt(databaseUrl: string): Promise<Date> {
   }
 }
 
-function daysBetween(from: Date, to: Date): number {
+export function daysBetween(from: Date, to: Date): number {
   return Math.floor((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000));
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const { STAGING_DATABASE_URL } = process.env;
   if (!STAGING_DATABASE_URL) {
     console.error('STAGING_DATABASE_URL is not set — cannot determine the database\'s actual creation date.');
@@ -103,7 +109,11 @@ async function main(): Promise<void> {
   console.log('Deadline reminder email sent.');
 }
 
-main().catch((err: Error) => {
-  console.error('Failed to run the staging DB deadline check:', err.message);
-  process.exitCode = 1;
-});
+// Guarded so importing this module in a test doesn't also execute it — only runs
+// when this file is the process's actual entry point (`tsx scripts/check-staging-db-deadline.ts`).
+if (require.main === module) {
+  main().catch((err: Error) => {
+    console.error('Failed to run the staging DB deadline check:', err.message);
+    process.exitCode = 1;
+  });
+}
