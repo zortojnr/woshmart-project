@@ -34,6 +34,17 @@ const envSchema = z
     OBJECT_STORAGE_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     OBJECT_STORAGE_BUCKET: z.string().min(1).optional(),
     OBJECT_STORAGE_REGION: z.string().min(1).optional(),
+
+    // Urgent-alert email (docs/BUILD_SCRIPT.md Phase 7 item 8) — fires only for
+    // payment/data-integrity dead-letters, per CLAUDE.md's alerting philosophy.
+    // Optional so boot isn't blocked before this is provisioned; all-or-none like
+    // object storage above, since a partially-set SMTP config would silently fail to
+    // send exactly the alert it exists to guarantee.
+    ALERT_SMTP_HOST: z.string().min(1).optional(),
+    ALERT_SMTP_PORT: z.coerce.number().int().positive().optional(),
+    ALERT_SMTP_USER: z.string().min(1).optional(),
+    ALERT_SMTP_PASSWORD: z.string().min(1).optional(),
+    ALERT_EMAIL_TO: z.string().email('ALERT_EMAIL_TO must be a valid email address').optional(),
   })
   .superRefine((vars, ctx) => {
     const objectStorageKeys = [
@@ -49,6 +60,17 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         message: `Partial object storage config — set all of [${objectStorageKeys.join(', ')}] or none. Missing: ${missing.join(', ')}`,
         path: ['OBJECT_STORAGE_ACCESS_KEY_ID'],
+      });
+    }
+
+    const alertEmailKeys = ['ALERT_SMTP_HOST', 'ALERT_SMTP_PORT', 'ALERT_SMTP_USER', 'ALERT_SMTP_PASSWORD', 'ALERT_EMAIL_TO'] as const;
+    const alertPresent = alertEmailKeys.filter((key) => vars[key] !== undefined);
+    if (alertPresent.length > 0 && alertPresent.length < alertEmailKeys.length) {
+      const missing = alertEmailKeys.filter((key) => vars[key] === undefined);
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Partial alert-email config — set all of [${alertEmailKeys.join(', ')}] or none. Missing: ${missing.join(', ')}`,
+        path: ['ALERT_SMTP_HOST'],
       });
     }
   });

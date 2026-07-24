@@ -89,4 +89,4 @@ Track ad hoc — these aren't sequential/gated the way Phases 0–8 are, so log 
 
 | Item | Status | PR | Notes |
 |---|---|---|---|
-| — | — | — | — |
+| Staging DB free-tier backup + deletion-deadline reminder | Done | (Phase 7 follow-up) | `woshmart-staging-db` is on Render's free tier — created **2026-07-24**, hard deletion at **2026-09-06** (44 days) unless upgraded first. Daily `pg_dump` → Backblaze B2 (7+ day retention via B2 lifecycle rule) and an escalating email reminder from day 30 both run via `.github/workflows/staging-backup.yml`. Full procedure and dates in `docs/SECURITY.md` §3.9. |

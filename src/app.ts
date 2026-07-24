@@ -5,11 +5,18 @@ import { asyncHandler } from './lib/asyncHandler';
 import { checkHealth } from './lib/health';
 import { AppError } from './lib/errors';
 import { httpLogger, logger } from './lib/logger';
+import { Sentry } from './lib/sentry';
 import { handleInboundWebhook, handleStatusWebhook } from './webhooks/twilio.controller';
 import { validateTwilioSignature } from './webhooks/twilio.validate';
+import { webhookGlobalRateLimit, webhookPhoneRateLimit } from './webhooks/rateLimit.middleware';
 
 export function createApp() {
   const app = express();
+
+  // Render sits in front of this service as a reverse proxy — without this,
+  // req.ip resolves to Render's internal proxy address, not the real caller,
+  // which would make IP-keyed rate limiting (admin login) useless.
+  app.set('trust proxy', 1);
 
   app.use(httpLogger);
   // Twilio sends application/x-www-form-urlencoded webhook payloads; extended:false
@@ -24,12 +31,15 @@ export function createApp() {
 
   app.post(
     '/webhooks/twilio/inbound',
+    webhookGlobalRateLimit('inbound'),
     validateTwilioSignature,
+    webhookPhoneRateLimit,
     asyncHandler(handleInboundWebhook),
   );
 
   app.post(
     '/webhooks/twilio/status',
+    webhookGlobalRateLimit('status'),
     validateTwilioSignature,
     asyncHandler(handleStatusWebhook),
   );
@@ -47,6 +57,9 @@ export function createApp() {
       res.status(err.statusCode).json({ error: err.expose ? err.message : 'Request failed' });
       return;
     }
+    // Only genuinely unexpected errors go to Sentry — AppError instances above (400/
+    // 401/403/404/429) are expected control flow, not bugs, and would just be noise.
+    Sentry.captureException(err);
     logger.error({ err: err.message, stack: err.stack }, 'Unhandled error');
     res.status(500).json({ error: 'Internal server error' });
   });
