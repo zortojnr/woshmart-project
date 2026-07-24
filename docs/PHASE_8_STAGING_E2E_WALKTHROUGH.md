@@ -4,9 +4,11 @@ Companion to Phase 8 of `BUILD_SCRIPT.md` item 2. This has to be executed by a h
 
 Real staging phone numbers required: one acting as the customer, one acting as the test Woshman, one acting as the test partner. Use `scripts/seed-test-woshman-partner.ts` against staging if the test Woshman/partner records don't already exist there.
 
-## Before you start: one real gap this walkthrough works around, not fixes
+## Before you start: a confirmed bug this walkthrough works around, not fixes
 
-There is **no automated trigger anywhere in the code** that moves an order from `assigned` to `pickup_scheduled` — checked directly against every controller/service/job in the repo, not assumed. `TRD.md` §9's legal-transition table requires an order to be at `pickup_scheduled` before `picked_up` (the `COLLECTED` keyword's target), and `PRD.md`'s notification matrix lists `PICKUP_SCHEDULED` as a COO-triggered step — meaning this is an intentional manual action, not a bug, but it has no purpose-built Retool button. **Part C below is that manual step.** Skip it and the Woshman's `COLLECTED` message will come back as an illegal-transition rejection, which would look like a bug but isn't one — this is worth reporting as a real UX gap in the launch-readiness summary regardless (Phase 8 is verification, not a fix, so it's flagged, not built here).
+There is **no automated trigger anywhere in the code** that moves an order from `assigned` to `pickup_scheduled` — checked directly against every controller/service/job in the repo, not assumed. Initially this looked like it could be an intentional manual COO step, since `PRD.md`'s status table lists `PICKUP_SCHEDULED | COO | Pickup time confirmed`. **Checked further and confirmed this is a real missing-automation bug, not an intentional design:** `USER_JOURNEY.md`'s own sequence diagram — the actual intended flow, not just a status table — goes straight from `COO->>Bot: Assign Woshman + Partner` to the Woshman's `"COLLECTED <id>"` message, with no separate confirmation step in between, and explicitly describes this stretch as "Automatic status updates as Woshman/partner progress the order." The customer already chose their pickup window during the original conversation, before the order even existed — there's nothing left to confirm with them at assignment time. This is tracked as a bug to fix in its own follow-up PR (not this one — Phase 8 is verification/docs only), not something to leave as permanent manual process.
+
+**Part C below is the workaround** until that fix lands. Skip it and the Woshman's `COLLECTED` message will come back as an illegal-transition rejection.
 
 ---
 
