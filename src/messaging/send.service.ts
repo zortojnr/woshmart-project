@@ -71,7 +71,19 @@ function stripWhatsAppPrefix(phoneNumber: string): string {
 
 export interface SendMessageInput {
   to: string;
+  // Always required, even when contentSid is set — used as the free-text fallback (see
+  // contentSid below) and as the record stored in the messages table either way, so the
+  // audit trail reads the same regardless of which path actually sent.
   body: string;
+  // A Twilio Content API template SID. When provided, the message is sent as an
+  // approved WhatsApp template instead of free text — required for any business-
+  // initiated send outside the customer's 24h session window (docs/BUILD_SCRIPT.md
+  // Phase 8 launch-readiness finding). When omitted (e.g. the template isn't approved/
+  // configured yet), falls back to the free-text `body` — no worse than the
+  // pre-existing behavior, and the fix activates automatically the moment a caller
+  // starts passing a real contentSid, no further code change needed.
+  contentSid?: string;
+  contentVariables?: Record<string, string>;
 }
 
 export interface SendMessageResult {
@@ -79,7 +91,7 @@ export interface SendMessageResult {
   twilioSid?: string;
 }
 
-export async function sendMessage({ to, body }: SendMessageInput): Promise<SendMessageResult> {
+export async function sendMessage({ to, body, contentSid, contentVariables }: SendMessageInput): Promise<SendMessageResult> {
   const toAddress = toWhatsAppAddress(to);
   const phoneNumber = stripWhatsAppPrefix(to);
 
@@ -91,7 +103,9 @@ export async function sendMessage({ to, body }: SendMessageInput): Promise<SendM
       const message = await twilioClient.messages.create({
         from: env.TWILIO_WHATSAPP_NUMBER,
         to: toAddress,
-        body,
+        ...(contentSid
+          ? { contentSid, contentVariables: JSON.stringify(contentVariables ?? {}) }
+          : { body }),
       });
 
       await prisma.message.create({

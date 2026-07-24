@@ -36,6 +36,44 @@ beforeEach(() => {
   prismaMessageCreateMock.mockClear();
 });
 
+describe('sendMessage — WhatsApp template (contentSid) path', () => {
+  it('sends via the Content API (contentSid + contentVariables) when contentSid is provided, not free text', async () => {
+    createMessageMock.mockResolvedValueOnce({ sid: 'SM789', status: 'queued' });
+
+    await runAndFlush(
+      sendMessage({
+        to: '+2348011111111',
+        body: 'fallback text, should not be used',
+        contentSid: 'HXtemplate123',
+        contentVariables: { '1': 'WM-042' },
+      }),
+    );
+
+    expect(createMessageMock).toHaveBeenCalledWith({
+      from: expect.any(String),
+      to: 'whatsapp:+2348011111111',
+      contentSid: 'HXtemplate123',
+      contentVariables: JSON.stringify({ '1': 'WM-042' }),
+    });
+    // No `body` key at all on the Content API path — confirms the free-text fallback
+    // text genuinely isn't sent alongside the template.
+    expect(createMessageMock.mock.calls[0]?.[0]).not.toHaveProperty('body');
+  });
+
+  it('falls back to free text (body, no contentSid) when contentSid is not provided', async () => {
+    createMessageMock.mockResolvedValueOnce({ sid: 'SM790', status: 'queued' });
+
+    await runAndFlush(sendMessage({ to: '+2348011111111', body: 'plain text message' }));
+
+    expect(createMessageMock).toHaveBeenCalledWith({
+      from: expect.any(String),
+      to: 'whatsapp:+2348011111111',
+      body: 'plain text message',
+    });
+    expect(createMessageMock.mock.calls[0]?.[0]).not.toHaveProperty('contentSid');
+  });
+});
+
 describe('sendMessage', () => {
   it('sends successfully on the first attempt and logs the outbound message', async () => {
     createMessageMock.mockResolvedValueOnce({ sid: 'SM123', status: 'queued' });
