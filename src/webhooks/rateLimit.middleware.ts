@@ -9,6 +9,29 @@ import { logger } from '../lib/logger';
 
 const TWIML_EMPTY_RESPONSE = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 
+// These two thresholds are backstop defaults against abuse/runaway loops, not derived
+// from any Twilio-imposed limit — Twilio doesn't rate-limit how fast a customer can
+// text us; it forwards inbound webhooks as fast as they arrive. (The outbound side is
+// different — see send.service.ts's MIN_SEND_INTERVAL_MS, which does exist to respect
+// Twilio/WhatsApp's outbound tier.)
+//
+// Rough math behind the numbers: a full order is ~8-10 customer messages end to end
+// (WELCOME through FEEDBACK_PENDING), spread over minutes in real use. A worst-case
+// legitimate burst — a few rapid typo-correction resends, or a couple of trips through
+// the fallback handler's unmatched-input path — lands around 5-6 messages in a tight
+// cluster. Hitting 21 messages in one 60s window would require a real person
+// sustaining a message roughly every 3 seconds for a full minute straight, well past
+// normal typing/thumb speed even accounting for corrections — so PHONE_LIMIT has
+// comfortable headroom for genuine use.
+//
+// GLOBAL_LIMIT has even more margin at current expected scale (~100 concurrent users/
+// month): realistic peak concurrent active conversations in any given minute is low
+// single digits to low tens, not hundreds — even a pessimistic stack-up (20 customers
+// simultaneously mid-conversation, each sending 2-3 messages in that same minute) lands
+// around 40-60 requests, still well under 300.
+//
+// Review and adjust if real usage data says otherwise — these are not fixed forever,
+// just the best estimate available before any real traffic exists to measure against.
 const PHONE_LIMIT = 20;
 const PHONE_WINDOW_MS = 60_000;
 
