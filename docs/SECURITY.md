@@ -157,6 +157,24 @@ This is intentionally lightweight — sized for a small team running a regional 
 
 Log as a normal engineering issue, prioritize alongside other work, fix without the urgency/notification steps above. Track resolution — don't let these silently age out.
 
+### 4.4 Incident log
+
+Dated record of actual incidents, per §4.2 step 5 — kept even for near-misses, since the writeup is what prevents a repeat.
+
+**2026-07-24 — Redis password exposed in terminal output (SEV3)**
+- **What happened:** the real Upstash Redis password appeared in terminal output during interactive debugging earlier in this session (a `cat .env`-equivalent command run while diagnosing an unrelated issue).
+- **Evidence of exploitation:** none.
+- **Root cause:** the real secret value was visible in command output during an interactive debugging session, rather than being handled through a mechanism that avoids echoing it (e.g. piping via stdin with no echo, or reading through a secrets manager instead of a plaintext file dump).
+- **Remediation:** credential rotated.
+
+**2026-07-24 — Staging database password exposed in terminal output (SEV3)**
+- **What happened:** the real staging Postgres password appeared in terminal output when setting `$env:DATABASE_URL` inline for a seed script run against staging.
+- **Evidence of exploitation:** none. Staging-only credential, not production.
+- **Root cause:** same as above — a real secret value passed and echoed via an interactive shell command rather than a mechanism that avoids displaying it.
+- **Remediation:** a new default credential was created on the Render Postgres instance, `DATABASE_URL` was updated on the Web Service to the new credential, `/health` was confirmed showing both `db` and `redis` up on the new configuration, and the old credential was deleted.
+
+**Severity rationale for both:** SEV3, not SEV1/SEV2 — no evidence of exploitation, staging-only (the Redis instance) or explicitly non-production (the DB credential), and both were rotated promptly once identified. Per §4.1's definitions, a SEV2 would require the secret being *found exposed in git history* specifically; the Phase 7 git-history sweep (§3.7) found neither of these two values committed anywhere, which is what keeps this a contained near-miss rather than an escalation.
+
 ## 5. Vulnerability disclosure
 
 Woshmart is an internal operational system, not a public-facing product with an external user base submitting bug bounty reports — but the discipline still applies if a partner, Woshman, or customer ever reports something that looks like a security issue (e.g. "I got someone else's order confirmation"):
