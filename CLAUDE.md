@@ -47,6 +47,7 @@ These are gates, not suggestions. If you're about to violate one, stop and say s
 8. **Every Admin API write is audit-logged** via the shared middleware, no exceptions for "small" endpoints.
 9. **No feature is "done" without its failure mode stated.** Before considering a task complete, answer: what happens if the network call fails, the input is malformed, the event arrives twice, or the downstream service is slow? If you don't know, it's not done.
 10. **Don't add infrastructure the BUILD_SCRIPT.md hasn't called for.** No new services, no new external dependencies, no "just in case" abstraction layers. If you think something's genuinely needed beyond what's scoped, say so and wait for confirmation before building it.
+11. **Never print a secret's raw value in tool output, logs, or terminal commands, even for debugging.** Connection strings, API keys, tokens, passwords — use redacted display (first/last few characters only) or omit entirely. This applies to Claude Code's own commands, not just application code. Added after three real secret-exposure incidents in a single session (see `docs/SECURITY.md` §4.4) — treat it with the same weight as the other rules in this list, not as a one-off lesson.
 
 ## Alerting / failure philosophy
 
