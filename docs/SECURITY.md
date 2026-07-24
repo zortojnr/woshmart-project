@@ -208,7 +208,13 @@ Dated record of actual incidents, per §4.2 step 5 — kept even for near-misses
 - **Root cause:** same as above — a real secret value passed and echoed via an interactive shell command rather than a mechanism that avoids displaying it.
 - **Remediation:** a new default credential was created on the Render Postgres instance, `DATABASE_URL` was updated on the Web Service to the new credential, `/health` was confirmed showing both `db` and `redis` up on the new configuration, and the old credential was deleted.
 
-**Severity rationale for both:** SEV3, not SEV1/SEV2 — no evidence of exploitation, staging-only (the Redis instance) or explicitly non-production (the DB credential), and both were rotated promptly once identified. Per §4.1's definitions, a SEV2 would require the secret being *found exposed in git history* specifically; the Phase 7 git-history sweep (§3.7) found neither of these two values committed anywhere, which is what keeps this a contained near-miss rather than an escalation.
+**2026-07-24 — Local dev database password exposed in tool output while debugging the staging-backup deadline reminder (SEV3)**
+- **What happened:** the real local dev Neon database password appeared directly in visible tool output while constructing a connection string (via `new URL(...)`) to set up a throwaway scratch database for testing the deadline-reminder script's edge-case handling.
+- **Evidence of exploitation:** none. Local dev-only credential (Neon), not staging or production.
+- **Root cause:** same pattern as the two entries above — a real secret value handled in a way that displayed it directly, rather than a mechanism (e.g. constructing/using connection strings entirely within a script's own memory, with only non-secret results printed) that avoids it. This is the third occurrence of the same root cause in one session, which is itself worth noting: the underlying habit (treating "print the connection string to check it" as a normal debugging step) needs to change, not just the individual credential each time.
+- **Remediation:** credential rotated via the Neon console.
+
+**Severity rationale for all three:** SEV3, not SEV1/SEV2 — no evidence of exploitation in any case, none production (two staging/dev-tooling credentials, one local-dev-only), and all three were rotated promptly once identified. Per §4.1's definitions, a SEV2 would require the secret being *found exposed in git history* specifically; the Phase 7 git-history sweep (§3.7) found none of these three values committed anywhere, which is what keeps this a contained pattern of near-misses rather than an escalation.
 
 ## 5. Vulnerability disclosure
 
