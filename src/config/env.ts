@@ -45,6 +45,14 @@ const envSchema = z
     ALERT_SMTP_USER: z.string().min(1).optional(),
     ALERT_SMTP_PASSWORD: z.string().min(1).optional(),
     ALERT_EMAIL_TO: z.string().email('ALERT_EMAIL_TO must be a valid email address').optional(),
+
+    // WhatsApp template fallback (docs/BUILD_SCRIPT.md Phase 8 launch-readiness
+    // finding): the delivery notice and feedback nudge can fire outside the
+    // customer's 24h session window, where free text risks rejection. Each is
+    // independent — set once its template is approved and its Twilio Content
+    // resource exists; until then, send.service.ts falls back to free text.
+    TWILIO_CONTENT_SID_DELIVERY_NOTICE: z.string().min(1).optional(),
+    TWILIO_CONTENT_SID_FEEDBACK_NUDGE: z.string().min(1).optional(),
   })
   .superRefine((vars, ctx) => {
     const objectStorageKeys = [

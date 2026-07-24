@@ -5,8 +5,10 @@ import {
   readyForPickupAlertMessage,
   STATUS_UPDATE_MESSAGES,
 } from '../../../src/conversation/messages';
+import { env } from '../../../src/config/env';
 import { prisma } from '../../../src/db/client';
 import { notify } from '../../../src/domain/notifications/notification.service';
+import { logger } from '../../../src/lib/logger';
 
 const sendMessageMock = vi.fn().mockResolvedValue({ status: 'sent' });
 vi.mock('../../../src/messaging/send.service', () => ({
@@ -87,6 +89,59 @@ describe('notification.service — notify', () => {
     expect(sendMessageMock).toHaveBeenCalledTimes(2);
     expect(sendMessageMock).toHaveBeenNthCalledWith(1, { to: testCustomerPhone, body: STATUS_UPDATE_MESSAGES.delivered });
     expect(sendMessageMock).toHaveBeenNthCalledWith(2, { to: testCustomerPhone, body: FEEDBACK_PROMPT_MESSAGE });
+  });
+
+  it('DELIVERED falls back to free text (no contentSid key at all) when the template env vars are unset', async () => {
+    expect(env.TWILIO_CONTENT_SID_DELIVERY_NOTICE).toBeUndefined();
+    expect(env.TWILIO_CONTENT_SID_FEEDBACK_NUDGE).toBeUndefined();
+
+    await notify('DELIVERED', orderId);
+
+    // Neither call should have a contentSid property at all in this state — not
+    // contentSid: undefined, genuinely absent, matching send.service.ts's
+    // exactOptionalPropertyTypes contract.
+    expect(sendMessageMock.mock.calls[0]?.[0]).not.toHaveProperty('contentSid');
+    expect(sendMessageMock.mock.calls[1]?.[0]).not.toHaveProperty('contentSid');
+  });
+
+  it('DELIVERED passes contentSid through once the template env vars are configured', async () => {
+    env.TWILIO_CONTENT_SID_DELIVERY_NOTICE = 'HXdeliverytest';
+    env.TWILIO_CONTENT_SID_FEEDBACK_NUDGE = 'HXfeedbacktest';
+
+    try {
+      await notify('DELIVERED', orderId);
+
+      expect(sendMessageMock).toHaveBeenNthCalledWith(1, {
+        to: testCustomerPhone,
+        body: STATUS_UPDATE_MESSAGES.delivered,
+        contentSid: 'HXdeliverytest',
+      });
+      expect(sendMessageMock).toHaveBeenNthCalledWith(2, {
+        to: testCustomerPhone,
+        body: FEEDBACK_PROMPT_MESSAGE,
+        contentSid: 'HXfeedbacktest',
+      });
+    } finally {
+      env.TWILIO_CONTENT_SID_DELIVERY_NOTICE = undefined;
+      env.TWILIO_CONTENT_SID_FEEDBACK_NUDGE = undefined;
+    }
+  });
+
+  it('DELIVERED logs an info-level fallback line only for whichever template is unconfigured', async () => {
+    const infoSpy = vi.spyOn(logger, 'info');
+    env.TWILIO_CONTENT_SID_DELIVERY_NOTICE = 'HXdeliverytest';
+    env.TWILIO_CONTENT_SID_FEEDBACK_NUDGE = undefined;
+
+    try {
+      await notify('DELIVERED', orderId);
+
+      const fallbackLines = infoSpy.mock.calls.filter((call) => typeof call[1] === 'string' && call[1].includes('sent as free text'));
+      expect(fallbackLines).toHaveLength(1);
+      expect(fallbackLines[0]?.[1]).toMatch(/^Feedback nudge/);
+    } finally {
+      env.TWILIO_CONTENT_SID_DELIVERY_NOTICE = undefined;
+      infoSpy.mockRestore();
+    }
   });
 
   it('READY_FOR_DELIVERY with no Woshman assigned logs and sends nothing, without throwing', async () => {

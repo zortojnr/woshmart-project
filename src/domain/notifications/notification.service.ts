@@ -19,9 +19,21 @@ import {
   STATUS_UPDATE_MESSAGES,
   woshmanDispatchBriefMessage,
 } from '../../conversation/messages';
+import { env } from '../../config/env';
 import { logger } from '../../lib/logger';
 import { sendMessage } from '../../messaging/send.service';
 import { prisma } from '../../db/client';
+
+// Logs (info, not urgent — a signal to watch, not an alert) whenever a send that's
+// meant to eventually use an approved WhatsApp template still falls back to free text.
+// Once the relevant TWILIO_CONTENT_SID_* is configured, this line simply stops
+// appearing for that message — that disappearance is the concrete signal this stops
+// mattering (docs/BUILD_SCRIPT.md Phase 8 launch-readiness finding).
+function logIfTemplateFallback(contentSid: string | undefined, label: string, orderId: string): void {
+  if (!contentSid) {
+    logger.info({ orderId }, `${label} sent as free text — its TWILIO_CONTENT_SID_* env var isn't configured yet`);
+  }
+}
 
 export type NotificationEvent =
   | 'PICKED_UP'
@@ -68,15 +80,33 @@ export async function notify(event: NotificationEvent, orderId: string): Promise
       return;
     }
 
-    case 'DELIVERED':
+    case 'DELIVERED': {
       // PRD.md §12: "Woshman keyword: DELIVERED | customer ✅ + feedback prompt | COO ✅ | Woshman ❌ | Partner ❌"
-      await sendMessage({ to: order.user.phoneNumber, body: STATUS_UPDATE_MESSAGES.delivered });
-      await sendMessage({ to: order.user.phoneNumber, body: FEEDBACK_PROMPT_MESSAGE });
+      // Both of these are business-initiated and can fire hours after the customer's
+      // last message — real risk of landing outside the 24h session window, so both
+      // prefer an approved template and fall back to free text only if unconfigured
+      // (docs/BUILD_SCRIPT.md Phase 8 launch-readiness finding).
+      const deliveryContentSid = env.TWILIO_CONTENT_SID_DELIVERY_NOTICE;
+      logIfTemplateFallback(deliveryContentSid, 'Delivery notice', orderId);
+      await sendMessage({
+        to: order.user.phoneNumber,
+        body: STATUS_UPDATE_MESSAGES.delivered,
+        ...(deliveryContentSid ? { contentSid: deliveryContentSid } : {}),
+      });
+
+      const feedbackContentSid = env.TWILIO_CONTENT_SID_FEEDBACK_NUDGE;
+      logIfTemplateFallback(feedbackContentSid, 'Feedback nudge', orderId);
+      await sendMessage({
+        to: order.user.phoneNumber,
+        body: FEEDBACK_PROMPT_MESSAGE,
+        ...(feedbackContentSid ? { contentSid: feedbackContentSid } : {}),
+      });
       // No COO dashboard/WhatsApp channel exists yet (Phase 5 Admin API) — informational
       // logging is the interim equivalent, matching CLAUDE.md's alerting philosophy
       // ("everything else surfaces in Retool/logs for business-hours review").
       logger.info({ orderId, orderNumber: order.orderNumber }, 'Order delivered — COO notified (log)');
       return;
+    }
 
     case 'ASSIGNED':
       // PRD.md §12 "Bank transfer verified (PAID)" / "COD order confirmed" rows: customer
