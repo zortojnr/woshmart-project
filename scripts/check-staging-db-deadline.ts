@@ -2,34 +2,70 @@
 // free-tier hard-deletion deadline (docs/SECURITY.md §3.9). Run daily by
 // .github/workflows/staging-backup.yml.
 //
-// Deliberately standalone — does NOT import src/config/env.ts or
-// src/lib/alertEmail.ts. Both are coupled to the full application env schema
-// (TWILIO_*, DATABASE_URL, JWT_SIGNING_SECRET, ...), which this script has no
-// business requiring just to send one reminder email in a CI job that only has the
-// ALERT_SMTP_*/ALERT_EMAIL_TO secrets available. Uses the same library (nodemailer)
-// and the same alert-email shape as src/lib/alertEmail.ts, just without that
-// cross-cutting dependency.
+// Deliberately standalone re: alert-email config — does NOT import
+// src/config/env.ts or src/lib/alertEmail.ts. Both are coupled to the full
+// application env schema (TWILIO_*, JWT_SIGNING_SECRET, ...), which this script has
+// no business requiring just to send one reminder email in a CI job that only has
+// ALERT_SMTP_*/ALERT_EMAIL_TO/STAGING_DATABASE_URL available. Uses the same library
+// (nodemailer) and the same alert-email shape as src/lib/alertEmail.ts, just without
+// that cross-cutting dependency.
+//
+// The "creation date" is read from the database itself, not a hardcoded constant —
+// Postgres has no genuine "database created at" anywhere in its system catalogs
+// (checked directly: neither pg_database nor pg_stat_database expose one), so this
+// uses the earliest _prisma_migrations.started_at as a proxy. That row gets written
+// automatically the moment `prisma migrate deploy` first runs against a database —
+// which is already step 3 of the recreate-and-restore procedure — so this is
+// self-correcting after a recreation with zero extra manual step, unlike a hardcoded
+// date or a custom one-row table someone has to remember to update.
+import { PrismaClient } from '@prisma/client';
 import nodemailer from 'nodemailer';
-
-// Update this the day a fresh free-tier Postgres instance replaces this one — this
-// script has no way to detect that on its own.
-const STAGING_DB_CREATED_AT = '2026-07-24';
 
 const EXPIRATION_DAYS = 30;
 const GRACE_PERIOD_DAYS = 14;
 const TOTAL_LIFESPAN_DAYS = EXPIRATION_DAYS + GRACE_PERIOD_DAYS;
-const REMINDER_STARTS_AT_DAY = 30;
+// Migrations run slightly AFTER the database is actually created, so the proxy
+// timestamp always understates true elapsed time by some small margin (minutes to
+// hours in practice). Starting 2 days earlier than the nominal 30-day expiration
+// absorbs that in the safe direction, rather than risking a late-arriving first
+// reminder.
+const REMINDER_STARTS_AT_DAY = 28;
 
-function daysSince(dateStr: string): number {
-  const created = new Date(`${dateStr}T00:00:00Z`).getTime();
-  return Math.floor((Date.now() - created) / (24 * 60 * 60 * 1000));
+async function getEffectiveCreatedAt(databaseUrl: string): Promise<Date> {
+  const prisma = new PrismaClient({ datasourceUrl: databaseUrl });
+  try {
+    const rows = await prisma.$queryRaw<{ created_at: Date | null }[]>`
+      SELECT MIN(started_at) AS created_at FROM _prisma_migrations
+    `;
+    const createdAt = rows[0]?.created_at;
+    if (!createdAt) {
+      throw new Error('_prisma_migrations has no rows — has `prisma migrate deploy` ever run against this database?');
+    }
+    return createdAt;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+function daysBetween(from: Date, to: Date): number {
+  return Math.floor((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000));
 }
 
 async function main(): Promise<void> {
-  const daysElapsed = daysSince(STAGING_DB_CREATED_AT);
+  const { STAGING_DATABASE_URL } = process.env;
+  if (!STAGING_DATABASE_URL) {
+    console.error('STAGING_DATABASE_URL is not set — cannot determine the database\'s actual creation date.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const createdAt = await getEffectiveCreatedAt(STAGING_DATABASE_URL);
+  const daysElapsed = daysBetween(createdAt, new Date());
   const daysRemaining = TOTAL_LIFESPAN_DAYS - daysElapsed;
 
-  console.log(`woshmart-staging-db: ${daysElapsed} day(s) since creation, ${daysRemaining} day(s) until permanent deletion.`);
+  console.log(
+    `woshmart-staging-db: earliest migration applied ${createdAt.toISOString()} (used as the effective creation date). ${daysElapsed} day(s) elapsed, ${daysRemaining} day(s) until permanent deletion.`,
+  );
 
   if (daysElapsed < REMINDER_STARTS_AT_DAY) {
     console.log('Within the safe window — no reminder needed.');
@@ -46,14 +82,14 @@ async function main(): Promise<void> {
   const urgency = daysRemaining <= 3 ? '🚨 FINAL WARNING' : daysRemaining <= 7 ? '⚠️ URGENT' : '⚠️';
   const subject = `[Woshmart URGENT] ${urgency} — woshmart-staging-db: ${daysRemaining} day(s) until permanent deletion`;
   const body = [
-    `woshmart-staging-db (Render free-tier Postgres) was created on ${STAGING_DB_CREATED_AT}.`,
+    `woshmart-staging-db (Render free-tier Postgres) was effectively created ${createdAt.toISOString()} (earliest _prisma_migrations run — Postgres has no queryable true creation timestamp).`,
     `Free-tier databases expire ${EXPIRATION_DAYS} days after creation, with a ${GRACE_PERIOD_DAYS}-day grace period to upgrade before Render permanently deletes the database and all its data.`,
     '',
     `Days elapsed: ${daysElapsed}`,
     `Days remaining before permanent deletion: ${daysRemaining}`,
     '',
     'Action needed: either upgrade woshmart-staging-db to a paid instance type in the Render dashboard, or follow the recreate-and-restore procedure in docs/SECURITY.md §3.9 using the latest daily backup from Backblaze B2.',
-    'Once resolved, update STAGING_DB_CREATED_AT in scripts/check-staging-db-deadline.ts to the new instance\'s actual creation date — this script has no way to detect the change on its own.',
+    'No manual bookkeeping needed after a restore — this reminder reads the new database\'s own earliest migration timestamp automatically once `prisma migrate deploy` has run against it.',
   ].join('\n');
 
   const transport = nodemailer.createTransport({
