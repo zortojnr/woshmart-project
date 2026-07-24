@@ -1,0 +1,69 @@
+name: Staging DB Backup & Free-Tier Deadline Reminder
+
+# woshmart-staging-db runs on Render's free Postgres tier, which is permanently
+# deleted 44 days after creation (30-day expiration + 14-day grace period — see
+# docs/SECURITY.md §3.9). This workflow does two independent, unrelated-but-related
+# jobs daily: take a real, restorable backup, and make sure nobody can miss the
+# deletion deadline.
+#
+# Runs in GitHub Actions rather than as a job inside the app itself: this repo
+# already has GitHub Actions CI, Ubuntu runners have real postgresql-client tools
+# available (unlike the Render Node runtime, which doesn't), and it doesn't consume
+# the app's own CU-hours or touch its runtime dependencies.
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # 03:00 UTC daily
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Dump staging database
+        env:
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+          DUMP_FILE="woshmart-staging-${TIMESTAMP}.pgdump"
+          # Custom format (-Fc): compressed, restorable with pg_restore. --no-owner
+          # --no-acl: a fresh Render Postgres instance has a different default role,
+          # so a dump with no owner/ACL statements at all is the one that restores
+          # cleanly without permission errors, per docs/SECURITY.md §3.9's procedure.
+          pg_dump "$STAGING_DATABASE_URL" -Fc --no-owner --no-acl -f "$DUMP_FILE"
+          echo "DUMP_FILE=$DUMP_FILE" >> "$GITHUB_ENV"
+
+      - name: Upload dump to Backblaze B2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+        run: |
+          set -euo pipefail
+          aws s3 cp "$DUMP_FILE" "s3://${{ secrets.B2_BUCKET_NAME }}/$DUMP_FILE" \
+            --endpoint-url "${{ secrets.B2_ENDPOINT }}"
+          # Retention (7+ days, per TRD.md §7) is enforced by a bucket lifecycle rule
+          # configured directly in B2 (delete after N days from upload) — not by any
+          # deletion logic here, so a workflow bug can't accidentally wipe out the
+          # only copies of recent backups.
+
+  deadline-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - name: Check staging DB free-tier deletion deadline
+        env:
+          ALERT_SMTP_HOST: ${{ secrets.ALERT_SMTP_HOST }}
+          ALERT_SMTP_PORT: ${{ secrets.ALERT_SMTP_PORT }}
+          ALERT_SMTP_USER: ${{ secrets.ALERT_SMTP_USER }}
+          ALERT_SMTP_PASSWORD: ${{ secrets.ALERT_SMTP_PASSWORD }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+        run: npx tsx scripts/check-staging-db-deadline.ts

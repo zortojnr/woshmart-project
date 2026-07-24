@@ -97,25 +97,61 @@ Standalone security reference. `TRD.md` §7 and `CLAUDE.md`'s non-negotiable rul
 - `order_status_history` independently records every status transition regardless of trigger source, giving a second, order-centric audit trail alongside the admin-centric one.
 - Audit data itself is retained at least as long as the underlying order data it references.
 
-### 3.9 Backups & disaster recovery (Render Postgres)
+### 3.9 Backups & disaster recovery (Render Postgres — staging is currently free tier)
 
-Both staging (`woshmart-staging-db`) and production Postgres run on Render Postgres, not Neon (Neon is local-dev only) — the procedure below is Render-specific, not what a Neon/RDS runbook would say.
+Both staging (`woshmart-staging-db`) and production Postgres run on Render Postgres, not Neon (Neon is local-dev only). **Confirmed directly against Render's own docs, not assumed:** `woshmart-staging-db` is currently on Render's **free** Postgres tier, which has two consequences beyond the usual backup question:
 
-**Confirming backups are active** (requires Render dashboard access — not something this codebase can verify on its own):
+1. **No native backups at all.** Render's automated-backup feature requires a paid plan (Starter or above) — the free tier has none, not even a short retention window. This is a harder gap than "retention is too short" — there is nothing to restore from via Render itself.
+2. **Free-tier databases are deleted on a fixed clock, independent of usage.** Per Render's docs: a free Postgres instance expires **30 days after creation**, then gets a **14-day grace period** to upgrade before Render **permanently deletes the database and all its data**. Total lifespan: **44 days**, unless upgraded to a paid plan first.
 
-1. Render Dashboard → the Postgres instance → **Backups** tab.
-2. Automated daily backups require a paid plan (Starter or above) — the free tier does not include them. Confirm the instance is on a plan that has this enabled.
-3. Confirm retention meets the `TRD.md` §7 minimum (7 days; 30 preferred). Render's higher-tier plans also offer point-in-time recovery (PITR) within the retention window, not just daily snapshot points — confirm which mode the current plan gives you, since the restore procedure differs slightly (snapshot vs. arbitrary timestamp).
+**The actual dates for `woshmart-staging-db`:**
 
-**Restore procedure** (also requires dashboard access — perform this on staging, never as a live experiment against production):
+| | Date |
+|---|---|
+| Created | **2026-07-24** |
+| 30-day expiration | **2026-08-23** |
+| 44-day hard deletion (end of grace period) | **2026-09-06** |
 
-1. Render Dashboard → the Postgres instance → **Backups** tab → pick a backup point (or, on a PITR-capable plan, an arbitrary timestamp).
-2. Choose **Restore**. Render does **not** restore in place — it provisions a **new** database instance from that backup point, leaving the original untouched. You get a new connection string for the restored instance.
-3. Point a throwaway `DATABASE_URL` (never staging's or production's live one) at the new instance and spot-check known data — e.g. row counts on `orders`/`users`, or a specific order by its `order_number` — to confirm the restore is actually usable, not just "completed" in the dashboard.
-4. Delete the scratch restored instance once verified, so it doesn't sit around as an unmonitored, unpatched copy of real data.
-5. Record the date, backup point restored, and what was verified — this is the evidence that the restore procedure actually works, not just that the docs describe one.
+This is tracked as a real date, not an abstract policy, specifically so it can't quietly slip past — see the automated reminder below.
 
-This last step (actually performing a test restore) needs to be done by whoever holds Render dashboard access — it isn't something achievable from within this repo/session. Once done, record the result here and in the `BUILD_SCRIPT.md` Phase 7 checklist.
+**Compensating control, since Render's free tier gives us nothing to rely on:** `.github/workflows/staging-backup.yml` runs daily (03:00 UTC) and does two things:
+
+- **`backup` job:** `pg_dump`s `woshmart-staging-db` in custom format (`-Fc --no-owner --no-acl`, so it restores cleanly onto a differently-owned fresh instance) and uploads it to a private Backblaze B2 bucket via B2's S3-compatible API. Retention (`TRD.md` §7's 7-day minimum) is enforced by a **B2 bucket lifecycle rule** that auto-deletes objects after 8 days — not by any deletion logic in the workflow itself, so a workflow bug can't wipe out the only recent copies.
+- **`deadline-reminder` job:** runs `scripts/check-staging-db-deadline.ts`, which computes days-since-creation from the `STAGING_DB_CREATED_AT` constant in that script and, starting at day 30, sends an urgent email via the same alerting mechanism as Phase 7's payment/data-integrity alert (`nodemailer`, same SMTP shape) — escalating subject line as the deadline nears (⚠️ → ⚠️ URGENT at ≤7 days → 🚨 FINAL WARNING at ≤3 days). Treated with the same seriousness as that category, because a missed deadline here means permanent, unrecoverable data loss, not a delayed notification.
+
+**One-time setup required (cannot be done from within this repo/session):**
+
+*Backblaze B2:*
+1. Sign up at backblaze.com/b2 (free — 10GB storage included).
+2. Create a **private** bucket (e.g. `woshmart-staging-backups` — bucket names are global, add a suffix if taken).
+3. On the bucket, add a **Lifecycle Rule**: "keep only files uploaded in the last 8 days" (or the equivalent "days from uploading" rule) — this is what actually enforces the 7+ day retention window, not the workflow.
+4. Create an **Application Key** scoped to only that bucket, read+write capability only (not the master key, not "list all buckets").
+5. Note the Key ID, Application Key (secret), bucket name, and the bucket's S3-compatible endpoint (shown on the bucket's details page, e.g. `s3.us-west-004.backblazeb2.com`).
+
+*GitHub repo secrets* (Settings → Secrets and variables → Actions):
+- `STAGING_DATABASE_URL` — the real staging connection string.
+- `B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET_NAME`, `B2_ENDPOINT` — from the B2 setup above.
+- `ALERT_SMTP_HOST`, `ALERT_SMTP_PORT`, `ALERT_SMTP_USER`, `ALERT_SMTP_PASSWORD`, `ALERT_EMAIL_TO` — same values as the app's Phase 7 alert-email config (`woshmart@gmail.com` as the recipient).
+
+**Recreate-and-restore procedure** (the actual emergency runbook — follow this either when the deadline arrives, or to test the process before it matters):
+
+1. **Download the latest dump** from the B2 bucket (via the B2 web console, or `aws s3 cp s3://<bucket>/<file> . --endpoint-url <endpoint>` with the same credentials as the workflow).
+2. **Create a fresh Render Postgres instance** (free tier again, or upgrade to paid this time to stop the clock permanently — see below). Note its new connection string.
+3. **Recreate the schema from Prisma's migrations** — the migrations in `prisma/migrations/`, not the dump, are the schema's source of truth:
+   ```
+   DATABASE_URL="<new connection string>" npx prisma migrate deploy
+   ```
+4. **Restore the data** with `pg_restore` against the fresh, now-schema-only database:
+   ```
+   pg_restore --no-owner --no-acl --data-only -d "<new connection string>" <dump-file>
+   ```
+   `--data-only` is deliberate: the schema already came from step 3's migrations, so this only replays row data, avoiding any conflict between the dump's captured schema and the migrations' current one.
+5. **Verify before switching anything over:** connect to the new instance and spot-check known data — row counts on `orders`/`users`, a specific order by its `order_number`, that `admin_actions` audit rows are present. Don't trust "the command exited 0" alone.
+6. **Update `DATABASE_URL`** on the Render Web Service (staging) to the new connection string, and confirm `/health` shows both `db` and `redis` as `up` against the new database.
+7. **Update `STAGING_DB_CREATED_AT`** in `scripts/check-staging-db-deadline.ts` to the new instance's actual creation date — the reminder script has no way to detect the recreation on its own, and leaving the old date in place would either fire false alarms or (worse) go silent at the wrong time.
+8. **Delete the old, expired database** once the new one is confirmed working, and record the date/what was verified here or in `docs/BUILD_LOG.md`'s Post-MVP log.
+
+**The better long-term fix:** upgrading `woshmart-staging-db` to a paid Render plan before 2026-08-23 stops this clock entirely and gets Render's own native backups (§ above) instead of relying on this custom mechanism — worth doing regardless of how well the backup/restore path above works, since a custom pg_dump/B2 pipeline is a compensating control, not a replacement for the real thing.
 
 ### 3.10 Alerting (Render's built-in notifications)
 
