@@ -253,8 +253,26 @@ describe('notification.service — notify', () => {
     );
   });
 
-  it('ASSIGNED degrades to "TBC" in the dispatch brief when the stored pickup window does not resolve', async () => {
+  it('ASSIGNED degrades to "TBC" in the dispatch brief when the stored pickup window is null (never set)', async () => {
     const { order } = await makeAssignedOrder({ landmark: null, pickupWindow: null });
+
+    await notify('ASSIGNED', order.id);
+
+    const woshmanCall = sendMessageMock.mock.calls.find((call) => call[0].to === testWoshmanPhone)!;
+    expect(woshmanCall[0].body).toBe(
+      `New job: ${order.orderNumber}\nPickup: 15 Example Close\nTime: TBC\nReply COLLECTED ${order.orderNumber} once picked up.`,
+    );
+  });
+
+  it('ASSIGNED degrades to "TBC" in the dispatch brief when the stored pickup window id is non-null but unrecognized', async () => {
+    // Distinct from the null case above: this exercises the other branch of
+    // notification.service.ts's ternary, which actually calls
+    // getPickupWindowByMenuReply('9') (rather than short-circuiting past it because
+    // order.pickupWindow is falsy) and gets null back because '9' isn't a real window
+    // id. Same "TBC" outcome, different code path — kept as a separate case so a future
+    // change to that function's internals can't silently break this fallback without a
+    // test noticing.
+    const { order } = await makeAssignedOrder({ landmark: null, pickupWindow: '9' });
 
     await notify('ASSIGNED', order.id);
 
