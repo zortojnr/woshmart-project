@@ -20,6 +20,7 @@ import {
   woshmanDispatchBriefMessage,
 } from '../../conversation/messages';
 import { env } from '../../config/env';
+import { getPickupWindowByMenuReply } from '../orders/pickupWindows.config';
 import { logger } from '../../lib/logger';
 import { sendMessage } from '../../messaging/send.service';
 import { prisma } from '../../db/client';
@@ -108,7 +109,7 @@ export async function notify(event: NotificationEvent, orderId: string): Promise
       return;
     }
 
-    case 'ASSIGNED':
+    case 'ASSIGNED': {
       // PRD.md §12 "Bank transfer verified (PAID)" / "COD order confirmed" rows: customer
       // ✅, Woshman ✅ dispatch brief, partner ✅ job brief. Per USER_JOURNEY.md §2/§3 these
       // only make sense once a Woshman/partner is actually chosen, so this fires from the
@@ -123,14 +124,22 @@ export async function notify(event: NotificationEvent, orderId: string): Promise
         return;
       }
       await sendMessage({ to: order.user.phoneNumber, body: dispatchConfirmationMessage(order.woshman.name) });
+      // order.pickupWindow stores the raw menu-reply id (e.g. "2"), not display text —
+      // resolve it back to the spelled-out window before it goes in front of a human.
+      const pickupWindowOption = order.pickupWindow ? getPickupWindowByMenuReply(order.pickupWindow) : null;
+      if (!pickupWindowOption) {
+        logger.error(
+          { orderId, orderNumber: order.orderNumber, pickupWindow: order.pickupWindow },
+          'ASSIGNED notification: order.pickupWindow does not resolve to a known window — dispatch brief will show "TBC"',
+        );
+      }
       await sendMessage({
         to: order.woshman.phoneNumber,
         body: woshmanDispatchBriefMessage({
           orderNumber: order.orderNumber,
           address: order.address,
           landmark: order.landmark,
-          zone: order.zone,
-          pickupWindow: order.pickupWindow,
+          pickupWindow: pickupWindowOption?.dispatchLabel ?? null,
         }),
       });
       await sendMessage({
@@ -142,6 +151,7 @@ export async function notify(event: NotificationEvent, orderId: string): Promise
         }),
       });
       return;
+    }
 
     case 'PAYMENT_WINDOW_ABANDONED':
       // PRD.md §11.2/§12: the 60-min payment-window timeout gets a customer message

@@ -151,28 +151,30 @@ Legal transitions only — enforced in code, not convention (see TRD.md).
 
 ## 10. Message copy (exact — do not paraphrase)
 
+**Revision note:** copy below was revised from an earlier draft to remove em dashes (—) in favor of simpler punctuation, use `=` specifically on price-breakdown lines (clearer for a customer scanning amounts), and read less robotically. Confirmed with the user 2026-07-24.
+
 **Welcome**
 > "Hi! 👋 You've reached Woshmart. We pick up your clothes, wash and iron everything, and bring them back within 48 hours. Which area of Minna are you in?"
 
 **Coverage confirmed**
 > "We cover [area]! Here's what we offer:
-> 1. Starter Bundle — 10 items for ₦2,000
-> 2. Weekly Bundle — 20 items for ₦3,800
-> 3. Family Bundle — 30 items for ₦5,500
-> 4. Household Bundle — 10 items + bedsheet + 2 pillowcases for ₦3,000
+> 1. Starter Bundle: 10 items for ₦2,000
+> 2. Weekly Bundle: 20 items for ₦3,800
+> 3. Family Bundle: 30 items for ₦5,500
+> 4. Household Bundle: 10 items + bedsheet + 2 pillowcases for ₦3,000
 > Reply 1, 2, 3, or 4."
 
 **Out of coverage**
-> "We're not in [area] yet — but we're expanding. Want us to add you to the list and message you when we get there? Reply YES and we'll keep you posted."
+> "We're not in [area] yet, but we're expanding! Want us to add you to the list and let you know when we get there? Reply YES and we'll keep you posted."
 
 **Address request**
-> "[Bundle name] for ₦[price] — noted. What's your address? Drop a landmark too so our Woshman finds you fast."
+> "[Bundle name] for ₦[price], noted! What's your address? Drop a landmark too so our Woshman finds you fast."
 
 **Pickup time**
 > "When works for pickup?
-> 1. Today (morning — 7AM–12PM)
-> 2. Today (afternoon — 12PM–4PM)
-> 3. Today (evening — 4PM–7PM)
+> 1. Today (morning, 7AM–12PM)
+> 2. Today (afternoon, 12PM–4PM)
+> 3. Today (evening, 4PM–7PM)
 > 4. Tomorrow morning
 > 5. Tomorrow afternoon
 > Reply 1–5."
@@ -185,38 +187,38 @@ Legal transitions only — enforced in code, not convention (see TRD.md).
 
 **Quote**
 > "Here's your summary:
-> [Bundle name] — [X] items — ₦[price]
-> [Small basket fee — ₦500] (only if applicable)
-> Pickup + delivery — ₦1,000
-> Total — ₦[grand total]
+> [Bundle name], [X] items = ₦[price]
+> [Small basket fee = ₦500] (only if applicable)
+> Pickup + delivery = ₦1,000
+> Total = ₦[grand total]
 > Reply YES to confirm. Reply NO to cancel."
 
 **Bank transfer instructions**
 > "Send ₦[total] to:
 > [Bank name] | [Account number] | Woshmart
-> Send your receipt here once done — we'll confirm and get your Woshman moving."
+> Send your receipt here once done, and we'll confirm and get your Woshman moving."
 
 **COD confirmation**
-> "Your Woshman will collect ₦[total] cash when they deliver. They'll be with you by [time window] — have your items ready."
+> "Your Woshman will collect ₦[total] cash when they deliver. They'll be with you by [time window], so have your items ready!"
 
 **Dispatch confirmation**
-> "Got your payment — we're good to go. [Name] is your Woshman and they're heading to you now. We'll update you as things move."
+> "Got your payment, we're good to go! [Name] is your Woshman and they're heading to you now. We'll update you as things move."
 
 **Status updates** (fired automatically on Woshman/partner keyword — see TRD.md §Keyword protocol)
 - PICKED_UP: "Your clothes have been picked up and are heading to the laundry. ✅"
-- AT_LAUNDRY: "Your clothes are at the laundry — washing and ironing in progress. We'll ping you when they're heading back."
+- AT_LAUNDRY: "Your clothes are at the laundry, washing and ironing in progress. We'll ping you when they're heading back."
 - OUT_FOR_DELIVERY: "[Name] is on the way with your clothes. Should be with you soon."
 - DELIVERED: "Your clothes are home! 🧺 Thanks for using Woshmart."
 
 **Feedback prompt**
-> "Quick one — how did we do?
+> "Quick one, how did we do?
 > 1. All good 👍
 > 2. Had a small issue
-> 3. Something went wrong — please call me
+> 3. Something went wrong, please call me
 > Takes 5 seconds."
 - On 1: "Glad to hear it! 🙌 Know anyone who needs laundry sorted? Refer them and your next pickup is on us."
-- On 2: "Noted — what could we have done better?"
-- On 3: customer gets "Really sorry about that. Someone from the team will call you shortly." — COO tagged immediately, urgent.
+- On 2: "Noted, what could we have done better?"
+- On 3: customer gets "Really sorry about that. Someone from the team will call you shortly." COO tagged immediately, urgent.
 
 **Timeouts**
 - 30-min quote abandon: "Your order has timed out. Message us anytime to start again."
@@ -271,8 +273,9 @@ Customer flags at booking (light or hard) — bot adds ₦100/item. Partners inc
 | Event | Customer | COO | Woshman | Partner |
 |---|---|---|---|---|
 | New order confirmed (YES) | ✅ | ✅ | ❌ | ❌ |
-| Bank transfer verified (PAID) | ✅ | — (COO acted) | ✅ dispatch brief | ✅ job brief |
-| COD order confirmed | ✅ | ✅ | ✅ (on assignment) | ✅ (on assignment) |
+| Bank transfer verified (PAID) | ✅ | — (COO acted) | ❌ | ❌ |
+| COD order confirmed | ✅ | ✅ | ❌ | ❌ |
+| Woshman + partner assigned | ❌ | — (COO acted) | ✅ dispatch brief | ✅ job brief |
 | Woshman keyword: COLLECTED | ✅ | ❌ | ❌ | ❌ |
 | Woshman keyword: LAUNDRY | ✅ | ❌ | ❌ | ❌ |
 | Partner keyword: READY | ❌ | ❌ | ✅ alert | ❌ |
@@ -283,6 +286,8 @@ Customer flags at booking (light or hard) — bot adds ₦100/item. Partners inc
 | Order abandoned | ✅ timeout message | ✅ | ❌ | ❌ |
 | Door cancellation (ISSUE) | ❌ | ✅ immediate | ✅ fee confirmed | ❌ |
 | Partner SLA breach warning | ✅ delay notice | ✅ | ❌ | ✅ |
+
+**Correction note:** an earlier version of this table incorrectly showed the Woshman dispatch brief and partner job brief firing on the "Bank transfer verified (PAID)" row. Per `USER_JOURNEY.md`'s COO flow, PAID and assignment are two separate, sequential COO actions — payment verification does not itself assign anyone. Both briefs correctly fire once the COO explicitly assigns a Woshman and partner (its own row above), regardless of whether the order was paid via transfer or COD. Confirmed and corrected during Phase 5 implementation.
 
 ## 13. Explicitly out of scope (Phase 1 and 2)
 
