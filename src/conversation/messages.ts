@@ -15,25 +15,25 @@ export const WELCOME_MESSAGE =
 
 export function coverageConfirmedMessage(area: string): string {
   return `We cover ${area}! Here's what we offer:
-1. Starter Bundle — 10 items for ₦2,000
-2. Weekly Bundle — 20 items for ₦3,800
-3. Family Bundle — 30 items for ₦5,500
-4. Household Bundle — 10 items + bedsheet + 2 pillowcases for ₦3,000
+1. Starter Bundle: 10 items for ₦2,000
+2. Weekly Bundle: 20 items for ₦3,800
+3. Family Bundle: 30 items for ₦5,500
+4. Household Bundle: 10 items + bedsheet + 2 pillowcases for ₦3,000
 Reply 1, 2, 3, or 4.`;
 }
 
 export function outOfCoverageMessage(area: string): string {
-  return `We're not in ${area} yet — but we're expanding. Want us to add you to the list and message you when we get there? Reply YES and we'll keep you posted.`;
+  return `We're not in ${area} yet, but we're expanding! Want us to add you to the list and let you know when we get there? Reply YES and we'll keep you posted.`;
 }
 
 export function addressRequestMessage(bundleName: string, priceKobo: number): string {
-  return `${bundleName} for ₦${formatNairaFromKobo(priceKobo)} — noted. What's your address? Drop a landmark too so our Woshman finds you fast.`;
+  return `${bundleName} for ₦${formatNairaFromKobo(priceKobo)}, noted! What's your address? Drop a landmark too so our Woshman finds you fast.`;
 }
 
 export const PICKUP_TIME_MESSAGE = `When works for pickup?
-1. Today (morning — 7AM–12PM)
-2. Today (afternoon — 12PM–4PM)
-3. Today (evening — 4PM–7PM)
+1. Today (morning, 7AM–12PM)
+2. Today (afternoon, 12PM–4PM)
+3. Today (evening, 4PM–7PM)
 4. Tomorrow morning
 5. Tomorrow afternoon
 Reply 1–5.`;
@@ -62,19 +62,19 @@ export interface QuoteMessageInput {
 export function quoteMessage(input: QuoteMessageInput): string {
   const lines = [
     "Here's your summary:",
-    `${input.bundleName} — ${input.itemsLabel} — ₦${formatNairaFromKobo(input.serviceTotalKobo)}`,
+    `${input.bundleName}, ${input.itemsLabel} = ₦${formatNairaFromKobo(input.serviceTotalKobo)}`,
   ];
 
   if (input.smallBasketFeeKobo > 0) {
-    lines.push(`Small basket fee — ₦${formatNairaFromKobo(input.smallBasketFeeKobo)}`);
+    lines.push(`Small basket fee = ₦${formatNairaFromKobo(input.smallBasketFeeKobo)}`);
   }
 
   lines.push(
     input.logisticsFeeKobo > 0
-      ? `Pickup + delivery — ₦${formatNairaFromKobo(input.logisticsFeeKobo)}`
-      : 'Pickup + delivery — Free',
+      ? `Pickup + delivery = ₦${formatNairaFromKobo(input.logisticsFeeKobo)}`
+      : 'Pickup + delivery = Free',
   );
-  lines.push(`Total — ₦${formatNairaFromKobo(input.grandTotalKobo)}`);
+  lines.push(`Total = ₦${formatNairaFromKobo(input.grandTotalKobo)}`);
   lines.push('Reply YES to confirm. Reply NO to cancel.');
 
   return lines.join('\n');
@@ -97,20 +97,20 @@ export function quoteMessageForBundle(bundleId: BundleId): string {
 export function bankTransferInstructionsMessage(totalKobo: number): string {
   return `Send ₦${formatNairaFromKobo(totalKobo)} to:
 ${env.BANK_NAME} | ${env.BANK_ACCOUNT_NUMBER} | Woshmart
-Send your receipt here once done — we'll confirm and get your Woshman moving.`;
+Send your receipt here once done, and we'll confirm and get your Woshman moving.`;
 }
 
 export function codConfirmationMessage(totalKobo: number, timeWindowLabel: string): string {
-  return `Your Woshman will collect ₦${formatNairaFromKobo(totalKobo)} cash when they deliver. They'll be with you by ${timeWindowLabel} — have your items ready.`;
+  return `Your Woshman will collect ₦${formatNairaFromKobo(totalKobo)} cash when they deliver. They'll be with you by ${timeWindowLabel}, so have your items ready!`;
 }
 
 export function dispatchConfirmationMessage(woshmanName: string): string {
-  return `Got your payment — we're good to go. ${woshmanName} is your Woshman and they're heading to you now. We'll update you as things move.`;
+  return `Got your payment, we're good to go! ${woshmanName} is your Woshman and they're heading to you now. We'll update you as things move.`;
 }
 
 export const STATUS_UPDATE_MESSAGES = {
   picked_up: 'Your clothes have been picked up and are heading to the laundry. ✅',
-  at_laundry: 'Your clothes are at the laundry — washing and ironing in progress. We\'ll ping you when they\'re heading back.',
+  at_laundry: 'Your clothes are at the laundry, washing and ironing in progress. We\'ll ping you when they\'re heading back.',
   delivered: 'Your clothes are home! 🧺 Thanks for using Woshmart.',
 } as const;
 
@@ -118,15 +118,15 @@ export function outForDeliveryMessage(woshmanName: string): string {
   return `${woshmanName} is on the way with your clothes. Should be with you soon.`;
 }
 
-export const FEEDBACK_PROMPT_MESSAGE = `Quick one — how did we do?
+export const FEEDBACK_PROMPT_MESSAGE = `Quick one, how did we do?
 1. All good 👍
 2. Had a small issue
-3. Something went wrong — please call me
+3. Something went wrong, please call me
 Takes 5 seconds.`;
 
 export const FEEDBACK_RESPONSE_MESSAGES = {
   1: 'Glad to hear it! 🙌 Know anyone who needs laundry sorted? Refer them and your next pickup is on us.',
-  2: 'Noted — what could we have done better?',
+  2: 'Noted, what could we have done better?',
   3: 'Really sorry about that. Someone from the team will call you shortly.',
 } as const;
 
@@ -186,11 +186,13 @@ export function woshmanDispatchBriefMessage(input: {
   orderNumber: string;
   address: string;
   landmark: string | null;
-  zone: string;
   pickupWindow: string | null;
 }): string {
-  const landmarkLine = input.landmark ? ` (landmark: ${input.landmark})` : '';
-  return `New job: ${input.orderNumber} — pickup at ${input.address}${landmarkLine}, ${input.zone}. Window: ${input.pickupWindow ?? 'TBC'}. Reply COLLECTED ${input.orderNumber} once picked up.`;
+  const landmarkPart = input.landmark ? `, ${input.landmark}` : '';
+  return `New job: ${input.orderNumber}
+Pickup: ${input.address}${landmarkPart}
+Time: ${input.pickupWindow ?? 'TBC'}
+Reply COLLECTED ${input.orderNumber} once picked up.`;
 }
 
 export function partnerJobBriefMessage(input: { orderNumber: string; serviceType: string; itemsDescription: string | null }): string {

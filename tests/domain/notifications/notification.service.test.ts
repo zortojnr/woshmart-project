@@ -1,13 +1,17 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  dispatchConfirmationMessage,
   FEEDBACK_PROMPT_MESSAGE,
   outForDeliveryMessage,
+  partnerJobBriefMessage,
   readyForPickupAlertMessage,
   STATUS_UPDATE_MESSAGES,
+  woshmanDispatchBriefMessage,
 } from '../../../src/conversation/messages';
 import { env } from '../../../src/config/env';
 import { prisma } from '../../../src/db/client';
 import { notify } from '../../../src/domain/notifications/notification.service';
+import { getPickupWindowByMenuReply } from '../../../src/domain/orders/pickupWindows.config';
 import { logger } from '../../../src/lib/logger';
 
 const sendMessageMock = vi.fn().mockResolvedValue({ status: 'sent' });
@@ -17,8 +21,12 @@ vi.mock('../../../src/messaging/send.service', () => ({
 
 const testCustomerPhone = `+234704${Date.now().toString().slice(-7)}`;
 const testWoshmanPhone = `+234705${Date.now().toString().slice(-7)}`;
+const testPartnerPhone = `+234706${Date.now().toString().slice(-7)}`;
 let orderId: string;
 let orderNumber: string;
+let partnerId: string;
+const assignedOrderIds: string[] = [];
+const assignedUserPhones: string[] = [];
 
 describe('notification.service — notify', () => {
   beforeAll(async () => {
@@ -40,6 +48,11 @@ describe('notification.service — notify', () => {
     });
     orderId = order.id;
     orderNumber = order.orderNumber;
+
+    const partner = await prisma.partner.create({
+      data: { name: 'Test Partner Laundry', phoneNumber: testPartnerPhone, address: '1 Test Laundry Road' },
+    });
+    partnerId = partner.id;
   });
 
   beforeEach(() => {
@@ -49,8 +62,11 @@ describe('notification.service — notify', () => {
   afterAll(async () => {
     await prisma.orderStatusHistory.deleteMany({ where: { orderId } });
     await prisma.order.deleteMany({ where: { id: orderId } });
-    await prisma.user.deleteMany({ where: { phoneNumber: testCustomerPhone } });
+    await prisma.orderStatusHistory.deleteMany({ where: { orderId: { in: assignedOrderIds } } });
+    await prisma.order.deleteMany({ where: { id: { in: assignedOrderIds } } });
+    await prisma.user.deleteMany({ where: { phoneNumber: { in: [testCustomerPhone, ...assignedUserPhones] } } });
     await prisma.woshman.deleteMany({ where: { phoneNumber: testWoshmanPhone } });
+    await prisma.partner.deleteMany({ where: { phoneNumber: testPartnerPhone } });
     await prisma.$disconnect();
   });
 
@@ -165,5 +181,86 @@ describe('notification.service — notify', () => {
 
     await prisma.order.delete({ where: { id: orphanOrder.id } });
     await prisma.user.delete({ where: { id: user2.id } });
+  });
+
+  async function makeAssignedOrder(overrides: { landmark?: string | null; pickupWindow?: string | null }) {
+    const phoneNumber = `+234707${Date.now().toString().slice(-6)}${assignedOrderIds.length}`;
+    const user = await prisma.user.create({ data: { phoneNumber } });
+    const order = await prisma.order.create({
+      data: {
+        orderNumber: `WM-NOTIFY-ASSIGNED-${Date.now()}-${assignedOrderIds.length}`,
+        userId: user.id,
+        woshmanId: (await prisma.woshman.findUniqueOrThrow({ where: { phoneNumber: testWoshmanPhone } })).id,
+        partnerId,
+        address: '15 Example Close',
+        landmark: overrides.landmark ?? null,
+        zone: 'Maitumbi',
+        serviceType: 'starter',
+        itemsDescription: 'Starter Bundle items',
+        serviceTotalKobo: 200_000n,
+        grandTotalKobo: 300_000n,
+        paymentMethod: 'transfer',
+        pickupWindow: overrides.pickupWindow ?? null,
+        status: 'assigned',
+      },
+    });
+    assignedOrderIds.push(order.id);
+    assignedUserPhones.push(phoneNumber);
+    return { order, customerPhone: phoneNumber };
+  }
+
+  it('ASSIGNED sends the exact multi-line dispatch brief, with the landmark line included', async () => {
+    const { order, customerPhone } = await makeAssignedOrder({ landmark: 'blue gate', pickupWindow: '2' });
+
+    await notify('ASSIGNED', order.id);
+
+    const dispatchLabel = getPickupWindowByMenuReply('2')!.dispatchLabel;
+    expect(sendMessageMock).toHaveBeenCalledWith({
+      to: customerPhone,
+      body: dispatchConfirmationMessage('Test Woshman'),
+    });
+    expect(sendMessageMock).toHaveBeenCalledWith({
+      to: testWoshmanPhone,
+      body: woshmanDispatchBriefMessage({
+        orderNumber: order.orderNumber,
+        address: '15 Example Close',
+        landmark: 'blue gate',
+        pickupWindow: dispatchLabel,
+      }),
+    });
+    const woshmanCall = sendMessageMock.mock.calls.find((call) => call[0].to === testWoshmanPhone)!;
+    expect(woshmanCall[0].body).toBe(
+      `New job: ${order.orderNumber}\nPickup: 15 Example Close, blue gate\nTime: Today afternoon, 12PM–4PM\nReply COLLECTED ${order.orderNumber} once picked up.`,
+    );
+    expect(sendMessageMock).toHaveBeenCalledWith({
+      to: testPartnerPhone,
+      body: partnerJobBriefMessage({
+        orderNumber: order.orderNumber,
+        serviceType: 'starter',
+        itemsDescription: 'Starter Bundle items',
+      }),
+    });
+  });
+
+  it('ASSIGNED omits the landmark line entirely when the order has no landmark', async () => {
+    const { order } = await makeAssignedOrder({ landmark: null, pickupWindow: '4' });
+
+    await notify('ASSIGNED', order.id);
+
+    const woshmanCall = sendMessageMock.mock.calls.find((call) => call[0].to === testWoshmanPhone)!;
+    expect(woshmanCall[0].body).toBe(
+      `New job: ${order.orderNumber}\nPickup: 15 Example Close\nTime: Tomorrow morning\nReply COLLECTED ${order.orderNumber} once picked up.`,
+    );
+  });
+
+  it('ASSIGNED degrades to "TBC" in the dispatch brief when the stored pickup window does not resolve', async () => {
+    const { order } = await makeAssignedOrder({ landmark: null, pickupWindow: null });
+
+    await notify('ASSIGNED', order.id);
+
+    const woshmanCall = sendMessageMock.mock.calls.find((call) => call[0].to === testWoshmanPhone)!;
+    expect(woshmanCall[0].body).toBe(
+      `New job: ${order.orderNumber}\nPickup: 15 Example Close\nTime: TBC\nReply COLLECTED ${order.orderNumber} once picked up.`,
+    );
   });
 });

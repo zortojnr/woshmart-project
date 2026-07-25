@@ -9,15 +9,20 @@ export interface PickupWindowOption {
   // Matches the wording in the numbered PICKUP_TIME message list exactly enough to be
   // used standalone as the "[time window]" filler in the COD confirmation message.
   label: string;
+  // Spelled-out form used in the Woshman dispatch brief (Admin API assign action) —
+  // same underlying window as `label`, just with the day capitalized and the
+  // morning/afternoon/evening qualifier spelled out for the "today" windows, matching
+  // the PICKUP_TIME_MESSAGE menu wording rather than the terser `label` form.
+  dispatchLabel: string;
   dayOffset: 0 | 1;
 }
 
 export const PICKUP_WINDOWS: PickupWindowOption[] = [
-  { id: '1', label: 'today, 7AM–12PM', dayOffset: 0 },
-  { id: '2', label: 'today, 12PM–4PM', dayOffset: 0 },
-  { id: '3', label: 'today, 4PM–7PM', dayOffset: 0 },
-  { id: '4', label: 'tomorrow morning', dayOffset: 1 },
-  { id: '5', label: 'tomorrow afternoon', dayOffset: 1 },
+  { id: '1', label: 'today, 7AM–12PM', dispatchLabel: 'Today morning, 7AM–12PM', dayOffset: 0 },
+  { id: '2', label: 'today, 12PM–4PM', dispatchLabel: 'Today afternoon, 12PM–4PM', dayOffset: 0 },
+  { id: '3', label: 'today, 4PM–7PM', dispatchLabel: 'Today evening, 4PM–7PM', dayOffset: 0 },
+  { id: '4', label: 'tomorrow morning', dispatchLabel: 'Tomorrow morning', dayOffset: 1 },
+  { id: '5', label: 'tomorrow afternoon', dispatchLabel: 'Tomorrow afternoon', dayOffset: 1 },
 ];
 
 export function getPickupWindowByMenuReply(reply: string): PickupWindowOption | null {
