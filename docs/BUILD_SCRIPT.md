@@ -402,12 +402,12 @@ summary has been reviewed by a human.
 
 ## Phase 8 — Launch readiness
 
-- [ ] WhatsApp message templates approved (order confirmation, delivery notice, feedback nudge, stale-session nudge) — submitted back in Phase 0, confirm approval status now
-- [ ] Full manual end-to-end run on staging: place a real order, run through every status via keyword messages, verify feedback flow, verify a deliberately-wrong keyword is rejected cleanly
-- [ ] Production Twilio sender's webhook URLs pointed at production API
-- [ ] `super_admin` account created directly in production DB (not migrated from staging)
-- [ ] Pricing config seeded/confirmed correct for launch
-- [ ] Monitoring dashboards reviewed by a second person before go-live
+- [ ] WhatsApp message templates approved (order confirmation, delivery notice, feedback nudge, stale-session nudge) — submitted back in Phase 0, confirm approval status now — **blocked on Meta business verification for the production number; also found a real gap while checking: the delivery notice + feedback nudge are currently sent as plain free text with no Content API/template fallback, which risks rejection outside the customer's 24h session window in real usage — see `docs/PHASE_8_LAUNCH_READINESS_SUMMARY.md` §1**
+- [ ] Full manual end-to-end run on staging: place a real order, run through every status via keyword messages, verify feedback flow, verify a deliberately-wrong keyword is rejected cleanly — **script prepared in `docs/PHASE_8_STAGING_E2E_WALKTHROUGH.md`, not yet executed (requires real WhatsApp access Claude Code doesn't have)**
+- [ ] Production Twilio sender's webhook URLs pointed at production API — **checklist prepared in `docs/PHASE_8_PRODUCTION_CUTOVER.md` §7, not executed per CLAUDE.md's manual-production-promotion rule**
+- [ ] `super_admin` account created directly in production DB (not migrated from staging) — **procedure prepared in `docs/PHASE_8_PRODUCTION_CUTOVER.md` §5, not executed**
+- [ ] Pricing config seeded/confirmed correct for launch — **needs explicit founder/COO sign-off on `bundles.config.ts`'s live numbers, see `docs/PHASE_8_PRODUCTION_CUTOVER.md` §6 — not a code change, a business decision**
+- [ ] Monitoring dashboards reviewed by a second person before go-live — **summary prepared in `docs/PHASE_8_LAUNCH_READINESS_SUMMARY.md` §2 for that review; the review itself hasn't happened**
 - [ ] **Supervised pilot (see 8a below) completed before opening to unsupervised customer traffic**
 
 **Exit criteria:** first real customer order completes successfully end-to-end on production with no manual workaround required outside the defined COO steps (payment verification, assignment).
