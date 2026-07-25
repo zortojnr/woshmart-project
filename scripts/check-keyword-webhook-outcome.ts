@@ -33,6 +33,18 @@ import { PrismaClient } from '@prisma/client';
 
 const REPLY_WINDOW_MS = 2 * 60 * 1000; // outbound replies land within seconds in practice; 2 min is a generous ceiling
 
+// Defense in depth for the main().catch() handler below: Prisma's own error messages
+// have, in every failure we've actually observed, only ever included host:port (never
+// credentials) -- but that's Prisma's sanitization behavior, not a guarantee this
+// script's code can verify for every possible error shape. Strips anything that looks
+// like a connection string (scheme://[user[:pass]@]host[:port][/db][?query]) before it
+// ever reaches console.error, so a future Prisma version or an unanticipated error path
+// can't leak credentials through this script even if it starts embedding them.
+// CLAUDE.md rule 11: never print a secret's raw value, even for debugging.
+function redactConnectionStrings(message: string): string {
+  return message.replace(/\b\w+:\/\/[^\s]+/g, '[redacted connection string]');
+}
+
 function parseFlags(argv: string[]): Record<string, string> {
   const flags: Record<string, string> = {};
   for (const arg of argv) {
@@ -143,6 +155,6 @@ async function main() {
 }
 
 main().catch((err: Error) => {
-  console.error('Failed to check keyword webhook outcome:', err.message);
+  console.error('Failed to check keyword webhook outcome:', redactConnectionStrings(err.message));
   process.exitCode = 1;
 });
