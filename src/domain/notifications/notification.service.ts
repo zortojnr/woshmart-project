@@ -109,7 +109,7 @@ export async function notify(event: NotificationEvent, orderId: string): Promise
       return;
     }
 
-    case 'ASSIGNED':
+    case 'ASSIGNED': {
       // PRD.md §12 "Bank transfer verified (PAID)" / "COD order confirmed" rows: customer
       // ✅, Woshman ✅ dispatch brief, partner ✅ job brief. Per USER_JOURNEY.md §2/§3 these
       // only make sense once a Woshman/partner is actually chosen, so this fires from the
@@ -151,6 +151,7 @@ export async function notify(event: NotificationEvent, orderId: string): Promise
         }),
       });
       return;
+    }
 
     case 'PAYMENT_WINDOW_ABANDONED':
       // PRD.md §11.2/§12: the 60-min payment-window timeout gets a customer message
