@@ -84,4 +84,37 @@ Send each of these and confirm the exact reply — none of these should silently
 
 ## Completed transcript
 
-Fill in as executed — dates/times, exact message text both directions, and the ✅/❌ column above. This whole file (with the tables filled in) is the evidence that goes in the Phase 8 PR per `BUILD_SCRIPT.md`'s requirement.
+Executed live against staging on 2026-07-24/25, order `WM-003`. Recorded by the human tester (Claude Code has no WhatsApp/Twilio/Retool access, per the note at the top of this file) and cross-checked against the database directly (`order_status_history`, `messages`) rather than taken on WhatsApp-delivery-timing alone — see the operational note at the bottom.
+
+**Part A — placing the order:** completed in full. Real conversation (welcome → area → bundle → address → pickup time → payment method → quote → `YES`) produced `WM-003` at `awaiting_payment`, exactly as specified. ✅
+
+**Part B — COO actions:**
+1. Opened `WM-003` in Retool, confirmed `awaiting_payment` / `payment_method: transfer`. ✅
+2. **Mark PAID hit a real bug, since fixed:** the Retool button was configured to send `status: "PAID"` (uppercase) in its PATCH body. The Admin API's `statusUpdateSchema` (`orders.controller.ts`) validates `status` against the `OrderStatus` enum case-sensitively, by design (`z.enum`, not a case-insensitive match) — so it correctly rejected the malformed request rather than silently coercing it. This is a Retool-config bug, not a backend bug: the backend behaved exactly as CLAUDE.md rule 4 requires (illegal/malformed transitions rejected, not silently allowed). Fixed by correcting the Retool button's payload to lowercase `"paid"`; confirmed working after the fix. ✅ (backend correct throughout; Retool config was the actual defect)
+3. Assigned test Woshman + test partner via Retool. Status moved to `assigned` automatically as part of the assign action, no separate step. ✅
+4. Woshman's phone received the dispatch brief in the new corrected multi-line format (`docs/BUILD_SCRIPT.md`/`messages.ts` fix from PR #24) — real time-window text, not the previously-raw stored number. ✅
+5. Partner's phone received the job brief. ✅
+
+**Part C — manual `pickup_scheduled` step:** performed via the Admin API's `PATCH /admin/orders/:id/status` (same endpoint Retool's status-override control calls). Confirmed applied — verified directly via `order_status_history`, which shows the `pickup_scheduled` row preceding the `picked_up` transition below. ✅
+
+**Part D — keyword-driven progression (test Woshman's phone unless noted):**
+1. `COLLECTED WM-003` → transitioned to `picked_up`. Confirmed independently via `order_status_history`: `pickup_scheduled → picked_up` at `2026-07-25T14:42:52Z`, `changed_by: woshman`, correct note. ✅
+   - Repeat `COLLECTED WM-003` sent later → correctly returned the idempotency no-op reply ("...already marked as picked_up, no changes made") instead of erroring, duplicating the history row, or re-firing the customer notification (CLAUDE.md rule 6). ✅ — this also satisfies Part F, item 4 below.
+2. `LAUNDRY WM-003` → transitioned to `at_laundry`. Reply showed the corrected copy (comma instead of em dash, from PR #24). ✅
+3. `READY WM-003` sent from the **Woshman's** number (not the partner's) — correctly **rejected** ("READY can't be sent from this number..."), confirmed against `TRD.md` §4 ("Sent by partner, not Woshman") and the `KEYWORD_RULES` sender check in `keywordProtocol.service.ts`. ✅ as a sender-authorization test — but this does **not** cover the actual partner-side success path (a real `READY` from a genuine partner number transitioning the order and alerting the Woshman). **Not tested** — no second number was available to register as the test partner. Order was instead advanced to `ready_for_delivery` via a direct Admin API status override to unblock the rest of the walkthrough (see below). This gap is carried forward, not silently treated as covered.
+   - Extra verification found along the way, not in the original table: `DELIVERING WM-003` was sent (Woshman) *before* `ready_for_delivery` was reached — correctly **rejected** ("current status is at_laundry, check the order and try again"), confirming the state machine blocks skipping a step (CLAUDE.md rule 4) live, not just in unit tests. ✅
+4. Order manually advanced to `ready_for_delivery` via `PATCH /admin/orders/:id/status`, in place of the untested live partner `READY` flow above.
+4b. `DELIVERING WM-003` sent again (Woshman) → succeeded, transitioned to `out_for_delivery`. ✅
+5. `DELIVERED WM-003 10pcs` → succeeded, transitioned to `delivered`. ✅
+
+**Part E — feedback flow:** feedback prompt fired automatically on `DELIVERED`, as expected. Replied with score **3** (not the doc's suggested score 1) — a deliberate choice to exercise the urgent-escalation path instead. Got the correct holding message back ("Really sorry about that. Someone from the team will call you shortly."). ✅ for the live trigger (does `DELIVERED` genuinely land the session in `FEEDBACK_PENDING` with the prompt sent, and does a reply round-trip correctly) and specifically for the score-3 branch. Scores 1 and 2 remain verified only by `tests/conversation/states/feedback.test.ts` in isolation, per this file's original scope note — not re-tested live this pass, and a session can only be scored once, so covering them live would need two more complete orders driven to `DELIVERED`.
+
+**Part F — deliberately wrong keyword messages:**
+1. Malformed keyword (`COLLECTED` with no order number) → correctly rejected with the valid-formats list, no crash, no silence. ✅
+2. `READY WM-___` from the Woshman's number → covered above under Part D, item 3. ✅
+3. `COLLECTED WM-999` (nonexistent order) → **not tested this pass.** Flagging rather than marking done — this is a cheap, low-risk check to still run before treating Part F as fully closed.
+4. Repeat `COLLECTED WM-___` after already past `picked_up` → covered above under Part D, item 1 (idempotency no-op path specifically, not the illegal-transition path — both are acceptable per the original table, and the no-op is what was actually hit). ✅
+
+**Operational note — delayed WhatsApp replies:** several steps showed no immediate reply on WhatsApp. Independently confirmed via direct database checks (`messages`/`order_status_history` — see the conversation history around this PR for the exact queries) that every command succeeded on the backend within seconds; the WhatsApp replies were simply delayed. Consistent with Render free-tier cold-start behavior already flagged as a Phase 8 production-upgrade item, not a processing defect.
+
+**Net result:** every explicitly-scoped item in Parts A–F passed, with two gaps carried forward openly rather than glossed over: (1) the live partner-side `READY` success path (no second test number available), and (2) Part F item 3's nonexistent-order rejection (simply not executed this pass). Both are cheap to close out with either a second test phone number or a few more minutes on the existing one.
