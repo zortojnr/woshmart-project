@@ -166,11 +166,12 @@ woshmart-backend/
 |---|---|---|---|---|
 | Development | Local process | Neon (managed Postgres, free tier) | Upstash (managed Redis, free tier) | Sandbox |
 | Staging | Hosted on Render (Web Service) | Render Postgres (separate instance) | Redis Cloud (separate provider from dev's Upstash and production's Render Key Value, free tier) | Dedicated staging sender |
-| Production | Hosted on Render (Web Service, same platform as staging) | Render Postgres (separate instance, backups on) | Render Key Value (separate instance, free tier) | Production business number |
+| Production | Hosted on Render (Web Service, region Frankfurt — chosen to match the database, deliberately diverging from staging's Oregon) | **Supabase** (free tier, region Frankfurt) | Render Key Value (separate instance, free tier) | Production business number |
 
 - Dedicated subdomain for the API (e.g. `api.woshmart.com`), managed/auto-renewing TLS cert.
 - Retool connects to the Admin API URL for the relevant environment — staging first, production only once Admin API auth/RBAC is verified.
 - Redis intentionally spans three different free-tier providers across the three environments (Upstash for dev, Redis Cloud for staging, Render Key Value for production), not one provider everywhere — each free tier's own per-account/per-workspace limit ruled out reusing it for a second environment. See `docs/SETUP_GUIDE.md` §2's Redis row for the full reasoning.
+- Production's database isn't Render Postgres like staging's — it's Supabase, decided mid-Phase-8 after weighing the free-tier tradeoffs live (pauses rather than deletes on inactivity, one-click restorable, no card needed). This also means production's backend↔database connection isn't on Render's private network the way staging's is; Frankfurt was chosen for both specifically to minimize that public-internet hop, since it compounds across every sequential query in a request.
 - No environment shares secrets, credentials, or a Twilio sender with another.
 
 ## 6. Scalability notes
