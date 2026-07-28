@@ -57,7 +57,7 @@ Every one of these needs to exist, in the right environment's secret store, befo
 
 - [ ] `TWILIO_ACCOUNT_SID`
 - [ ] `TWILIO_AUTH_TOKEN` (used for both sending and webhook signature validation)
-- [ ] `TWILIO_WHATSAPP_NUMBER`
+- [ ] `TWILIO_WHATSAPP_NUMBER` — must include the `whatsapp:` prefix (e.g. `whatsapp:+15005550006`), enforced by `config/env.ts`'s regex; a bare number would otherwise fail this check at boot
 - [ ] `DATABASE_URL`
 - [ ] `REDIS_URL`
 - [ ] `JWT_SIGNING_SECRET` (long, random, generated — not a memorable phrase)

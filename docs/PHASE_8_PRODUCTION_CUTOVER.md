@@ -34,7 +34,7 @@ Do not start this until Phase 8's staging E2E walkthrough (`docs/PHASE_8_STAGING
 | `DATABASE_URL` | Internal Postgres URL from step 1.5 |
 | `REDIS_URL` | Internal Redis connection string from step 2.3 |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | The **production** Twilio account's credentials — never staging's, never the sandbox's |
-| `TWILIO_WHATSAPP_NUMBER` | The real production business number, once its Meta approval has cleared (see `docs/PHASE_8_LAUNCH_READINESS_SUMMARY.md` — this is the dependency that blocks everything downstream of it) |
+| `TWILIO_WHATSAPP_NUMBER` | The real production business number, once its Meta approval has cleared (see `docs/PHASE_8_LAUNCH_READINESS_SUMMARY.md` — this is the dependency that blocks everything downstream of it). **Must include the `whatsapp:` prefix** (e.g. `whatsapp:+15005550006`) — enforced by `config/env.ts`'s regex, so a bare number fails boot loudly rather than silently breaking sends. |
 | `JWT_SIGNING_SECRET` | **Freshly generated for production specifically** — run `openssl rand -hex 32` locally, paste the output. Never reuse the dev or staging secret; a shared signing secret would mean a staging-issued token could authenticate against production. |
 | `BANK_NAME` / `BANK_ACCOUNT_NUMBER` | The real production bank account customers will actually transfer to — not a staging placeholder |
 | `SENTRY_DSN` | A **separate Sentry project** from dev/staging if you want production errors distinguishable from test noise — or the same project with environment tagging (Sentry does this automatically via `NODE_ENV`, already wired in `src/lib/sentry.ts`) if you'd rather keep one project. Either is fine; just decide deliberately, don't default into whichever happens to be easiest. |
