@@ -195,8 +195,10 @@ Legal transitions only — enforced in code, not convention (see TRD.md).
 
 **Bank transfer instructions**
 > "Send ₦[total] to:
-> [Bank name] | [Account number] | Woshmart
+> [Bank name] | [Account number] | Wosh Mart Services
 > Send your receipt here once done, and we'll confirm and get your Woshman moving."
+
+Third field is the real registered bank account holder name, not the brand name — deliberately changed from "Woshmart" (confirmed with the user 2026-07-28) so it matches what the customer's own banking app shows during transfer (NIP name lookup), reducing the chance they hesitate or abandon the payment over a perceived mismatch.
 
 **COD confirmation**
 > "Your Woshman will collect ₦[total] cash when they deliver. They'll be with you by [time window], so have your items ready!"

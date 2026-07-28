@@ -94,9 +94,16 @@ export function quoteMessageForBundle(bundleId: BundleId): string {
   });
 }
 
+// The registered bank account holder name -- not the "Woshmart" brand name -- so it
+// matches what the customer's own banking app shows during transfer (NIP name lookup).
+// A literal, not env-driven: it's not a secret and, unlike BANK_NAME/BANK_ACCOUNT_NUMBER
+// (deliberately fake in staging), the legal account holder name doesn't vary by
+// environment (PRD.md §10, confirmed with the user 2026-07-28).
+const BANK_ACCOUNT_HOLDER_NAME = 'Wosh Mart Services';
+
 export function bankTransferInstructionsMessage(totalKobo: number): string {
   return `Send ₦${formatNairaFromKobo(totalKobo)} to:
-${env.BANK_NAME} | ${env.BANK_ACCOUNT_NUMBER} | Woshmart
+${env.BANK_NAME} | ${env.BANK_ACCOUNT_NUMBER} | ${BANK_ACCOUNT_HOLDER_NAME}
 Send your receipt here once done, and we'll confirm and get your Woshman moving.`;
 }
 
