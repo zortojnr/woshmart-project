@@ -84,6 +84,15 @@ describe('config/env', () => {
     expect(result.stderr).toContain('JWT_SIGNING_SECRET');
   });
 
+  it('fails fast when TWILIO_WHATSAPP_NUMBER is missing the "whatsapp:" prefix', () => {
+    // send.service.ts passes this straight through as Twilio's `from` field with no
+    // transformation -- a bare E.164 number here would pass a plain non-empty check and
+    // then silently break every outbound send, so this has to be caught at boot.
+    const result = runWithEnv({ ...validEnv, TWILIO_WHATSAPP_NUMBER: '+15005550006' });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('TWILIO_WHATSAPP_NUMBER');
+  });
+
   it('rejects a partially-configured object storage group', () => {
     const result = runWithEnv({ ...validEnv, OBJECT_STORAGE_BUCKET: 'some-bucket' });
     expect(result.status).toBe(1);
