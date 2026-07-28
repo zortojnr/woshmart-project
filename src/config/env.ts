@@ -12,7 +12,17 @@ const envSchema = z
 
     TWILIO_ACCOUNT_SID: z.string().min(1, 'TWILIO_ACCOUNT_SID is required'),
     TWILIO_AUTH_TOKEN: z.string().min(1, 'TWILIO_AUTH_TOKEN is required'),
-    TWILIO_WHATSAPP_NUMBER: z.string().min(1, 'TWILIO_WHATSAPP_NUMBER is required'),
+    // Must include the "whatsapp:" prefix (e.g. "whatsapp:+15005550006") -- send.service.ts
+    // passes this value straight through as the Twilio `from` field with no transformation
+    // (unlike the `to` field, which gets the prefix added if missing), so a value without
+    // it would pass this check pre-regex and then silently break every outbound send in
+    // that environment. Fails fast at boot instead.
+    TWILIO_WHATSAPP_NUMBER: z
+      .string()
+      .regex(
+        /^whatsapp:\+[1-9]\d{6,14}$/,
+        'TWILIO_WHATSAPP_NUMBER must include the "whatsapp:" prefix followed by an E.164 number, e.g. whatsapp:+15005550006',
+      ),
 
     DATABASE_URL: z.string().url('DATABASE_URL must be a valid connection string'),
     REDIS_URL: z.string().url('REDIS_URL must be a valid connection string'),
