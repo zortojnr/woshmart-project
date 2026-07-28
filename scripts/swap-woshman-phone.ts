@@ -42,6 +42,9 @@ async function main() {
     console.error(`No Woshman found with phone number "${from}".`);
     process.exit(1);
   }
+  console.log(
+    `Before: "${woshman.name}" (id: ${woshman.id}) — phone: ${woshman.phoneNumber}, availability: ${woshman.availability}, active: ${woshman.active}.`,
+  );
 
   const existingAtTarget = await findWoshmanByPhone(to);
   if (existingAtTarget) {
@@ -50,7 +53,8 @@ async function main() {
   }
 
   const updated = await updateWoshman(woshman.id, { phoneNumber: to });
-  console.log(`Updated Woshman "${updated.name}" (id: ${updated.id}): phone number changed from "${from}" to "${to}".`);
+  console.log(`After:  "${updated.name}" (id: ${updated.id}) — phone: ${updated.phoneNumber}.`);
+  console.log(`To swap back later: npx tsx scripts/swap-woshman-phone.ts --from=${to} --to=${from}`);
 }
 
 main()
