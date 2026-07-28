@@ -4,9 +4,12 @@
     "lib": ["ES2022"],
     "module": "CommonJS",
     "moduleResolution": "Node",
-    // "Node" resolves to the legacy node10 algorithm, deprecated as of TS 5.9 and
-    // removed in TS 7.0. Silencing rather than switching to Node16/NodeNext resolution
-    // — that changes import/extension rules project-wide and isn't a Phase task.
+    // "Node" resolves to the legacy node10 algorithm. Under this project's pinned
+    // typescript@5.9.3 (see package-lock.json), it's deprecated-but-functional and
+    // "ignoreDeprecations": "5.0" genuinely silences it -- verified locally, both
+    // `npm run build` and `npm run typecheck` exit 0. Switching to Node16/NodeNext
+    // resolution instead of silencing was tried and reverted: it breaks explicit relative
+    // imports in 17 test files (TS2835/TS2307), a real project-wide risk, not a Phase task.
     "ignoreDeprecations": "5.0",
     "outDir": "dist",
     "strict": true,

@@ -24,7 +24,7 @@ Do not start this until Phase 8's staging E2E walkthrough (`docs/PHASE_8_STAGING
 2. **Branch: `main`** — same rule as staging, production tracks merged work only.
 3. **Region:** matching steps 1–2.
 4. **Runtime:** Node.
-5. **Build Command:** `npm ci && npm run build`
+5. **Build Command:** `npm ci --include=dev && npm run build` — the `--include=dev` is required, not optional. `typescript` (and every other build tool: eslint, prettier, vitest, tsx) is a `devDependency`, and with `NODE_ENV=production` set (required below for the app's own runtime behavior), a plain `npm ci` silently skips all of them — `tsc` then doesn't exist, `npm run build` never produces `dist/`, and the service crash-loops on `Cannot find module '.../dist/server.js'` with no indication in the deploy log that this is why. Confirmed empirically: `NODE_ENV=production npm ci` installed 149 packages with `typescript` missing; `NODE_ENV=production npm ci --include=dev` installed the full 289, `typescript` present and correct version. This is a genuine `npm ci` + `NODE_ENV=production` interaction, not a Render-specific quirk.
 6. **Start Command:** `npx prisma migrate deploy && npm run start`
 7. **Instance type:** paid — free tier's spin-down delay (per `docs/SETUP_GUIDE.md`'s own warning) is not acceptable for real customer traffic waiting on a WhatsApp reply.
 8. Environment variables (do **not** click Create until all of these are set):
