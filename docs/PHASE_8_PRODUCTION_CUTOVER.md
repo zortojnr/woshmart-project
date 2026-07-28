@@ -4,29 +4,27 @@ Prepared per `BUILD_SCRIPT.md` Phase 8 item 3 — **documented, not executed.** 
 
 Do not start this until Phase 8's staging E2E walkthrough (`docs/PHASE_8_STAGING_E2E_WALKTHROUGH.md`) has actually passed, and not before Phase 8a's supervised-pilot requirement is understood — this checklist gets you to a working production environment, not to "safe to open to unsupervised customers." That's Phase 8a, after this.
 
-## 1. Production Postgres (Render)
+## 1. Production Postgres — DONE, on Supabase, not Render
 
-1. Render Dashboard → **New + → Postgres**.
-2. Name it `woshmart-production-db`. Same region choice matters for every other production resource below — pick once, reuse everywhere.
-3. **Instance type: a paid plan, not free** — this is the one non-negotiable difference from how staging started. Free-tier Postgres has no backups at all and is deleted after 44 days (confirmed the hard way on staging — see `docs/SECURITY.md` §3.9). Production cannot start on that clock.
-4. Once available, confirm automated backups are active and point-in-time recovery is enabled (Render Dashboard → the instance → **Backups** tab) — don't just assume the paid plan includes it, check the tab directly.
-5. Copy the **Internal Database URL** for the Web Service's env vars (step 3 below), and keep the **External Database URL** available for the one-time migration/seed step.
+**Live as of 2026-07-28.** The plan below originally called for Render Postgres on a paid plan. That changed mid-Phase-8: Render's paid Postgres was replaced with **Supabase's free tier** instead, after working through the actual tradeoffs live (see the session history around `docs/SETUP_GUIDE.md` §2's Redis-provider reasoning for the parallel Postgres discussion — Supabase's free tier pauses rather than permanently deletes on inactivity, is restorable with one click, needs no card, and a daily heartbeat plus the Session Pooler connection string avoid the pitfalls that would otherwise make a free tier unsuitable for production). `DATABASE_URL` uses Supabase's **Session Pooler** connection string specifically (not Direct or Transaction Pooler — see the environment variable table below), region **Frankfurt** to match the Web Service.
 
-## 2. Production Redis (Render Key Value)
+**Known, deliberate gap:** unlike staging (`docs/SECURITY.md` §3.9's `pg_dump` → Backblaze B2 pipeline), production currently has **no backup/disaster-recovery plan of its own** documented or implemented. This needs to happen before real customer/payment data accumulates — logged in `docs/BUILD_LOG.md`'s Post-MVP tracker.
 
-1. **New + → Key Value**. Name it `woshmart-production-redis`, same region as the DB.
-2. Paid tier — BullMQ's job queue (payment timeouts, auto-close, the staging deadline reminder's equivalent doesn't apply here since production presumably isn't on free-tier Postgres, but the queue infra itself still needs a Redis that doesn't randomly evict/reset) needs this to be persistent, not a free tier that could be reclaimed.
-3. Copy the **Internal Connection String**.
+## 2. Production Redis (Render Key Value) — DONE
 
-## 3. Production Web Service (Render)
+**Live as of 2026-07-28.** `woshmart-production-redis`, region Frankfurt (matching the Web Service, so Render's private network applies to this leg specifically — Supabase isn't a Render resource, so that benefit doesn't extend to the database connection). **Free tier**, not paid — the original plan below called for paid specifically to keep BullMQ's queue persistent, but per the same live tradeoff discussion as Postgres, free tier's actual risk here is low (BullMQ job pointers and rate-limit counters only, nothing durable — a restart-triggered loss just means an in-flight timeout job needs a manual nudge, not data loss) and this slot was freed up by moving staging's Redis to Redis Cloud instead (Render allows only one free Key Value instance per workspace).
+
+## 3. Production Web Service (Render) — DONE
+
+**Live as of 2026-07-28, confirmed healthy:** `/health` returns `{"ok":true,"db":"up","redis":"up"}`.
 
 1. **New + → Web Service**, connect the `woshmart-project` repo.
 2. **Branch: `main`** — same rule as staging, production tracks merged work only.
-3. **Region:** matching steps 1–2.
+3. **Region:** Frankfurt — matching Supabase's region specifically, since backend↔database latency compounds across every sequential query in a request, unlike the backend↔customer hop, which is dominated by Twilio's own network path regardless of region choice. This deliberately diverges from staging's Oregon region.
 4. **Runtime:** Node.
-5. **Build Command:** `npm ci --include=dev && npm run build` — the `--include=dev` is required, not optional. `typescript` (and every other build tool: eslint, prettier, vitest, tsx) is a `devDependency`, and with `NODE_ENV=production` set (required below for the app's own runtime behavior), a plain `npm ci` silently skips all of them — `tsc` then doesn't exist, `npm run build` never produces `dist/`, and the service crash-loops on `Cannot find module '.../dist/server.js'` with no indication in the deploy log that this is why. Confirmed empirically: `NODE_ENV=production npm ci` installed 149 packages with `typescript` missing; `NODE_ENV=production npm ci --include=dev` installed the full 289, `typescript` present and correct version. This is a genuine `npm ci` + `NODE_ENV=production` interaction, not a Render-specific quirk.
+5. **Build Command:** `npm ci --include=dev && npm run build` — the `--include=dev` is required, not optional. `typescript` (and every other build tool: eslint, prettier, vitest, tsx) is a `devDependency`, and with `NODE_ENV=production` set (required below for the app's own runtime behavior), a plain `npm ci` silently skips all of them — `tsc` then doesn't exist, `npm run build` never produces `dist/`, and the service crash-loops on `Cannot find module '.../dist/server.js'` with no indication in the deploy log that this is why. Confirmed empirically: `NODE_ENV=production npm ci` installed 149 packages with `typescript` missing; `NODE_ENV=production npm ci --include=dev` installed the full 289, `typescript` present and correct version. This is a genuine `npm ci` + `NODE_ENV=production` interaction, not a Render-specific quirk. Staging and CI are confirmed **not** at risk of the same issue — staging's `NODE_ENV` is `"staging"` and CI's is `"test"`, and `NODE_ENV=staging npm ci` was directly tested and installs the full dependency set, `typescript` included.
 6. **Start Command:** `npx prisma migrate deploy && npm run start`
-7. **Instance type:** paid — free tier's spin-down delay (per `docs/SETUP_GUIDE.md`'s own warning) is not acceptable for real customer traffic waiting on a WhatsApp reply.
+7. **Instance type:** **Free**, not paid — the plan below originally called this non-negotiable for the same spin-down-delay reason `docs/SETUP_GUIDE.md` warns about. Changed deliberately after weighing the tradeoff live: accepting the spin-down risk, planned to be mitigated by a keep-alive ping (UptimeRobot free tier, 5-minute interval, comfortably under Render's 15-minute spin-down threshold — more reliable for this than GitHub Actions cron, whose scheduling jitter can exceed 15 minutes under load). **Not yet confirmed set up** — logged in `docs/BUILD_LOG.md`'s Post-MVP tracker as a real open item, not something to assume is already active.
 8. Environment variables (do **not** click Create until all of these are set):
 
 | Variable | Value |
