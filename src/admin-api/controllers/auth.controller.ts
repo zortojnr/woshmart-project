@@ -12,24 +12,6 @@ const loginSchema = z.object({
 });
 
 export async function login(req: Request, res: Response): Promise<void> {
-  // TEMPORARY debug logging -- diagnosing a production "Invalid email or password"
-  // login failure that persisted after confirming (via direct DB checks) that the
-  // account exists, is active, has the right role, and the password hash matches.
-  // Placed before the Zod parse deliberately: a malformed request body would fail
-  // parsing and hit the same generic error below, indistinguishable from a real
-  // wrong-password case -- this is the one thing a DB-side check can never catch.
-  // Logs shape/lengths only, never the actual email or password value. Remove once
-  // the login issue is diagnosed -- not meant to stay in the codebase.
-  console.log('[LOGIN DEBUG] content-type:', req.headers['content-type']);
-  console.log('[LOGIN DEBUG] content-length:', req.headers['content-length']);
-  console.log('[LOGIN DEBUG] body keys:', req.body && typeof req.body === 'object' ? Object.keys(req.body) : typeof req.body);
-  console.log('[LOGIN DEBUG] body summary:', {
-    emailType: typeof req.body?.email,
-    emailLength: req.body?.email?.length,
-    passwordType: typeof req.body?.password,
-    passwordLength: req.body?.password?.length,
-  });
-
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new UnauthorizedError('Invalid email or password');
