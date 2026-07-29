@@ -1,0 +1,55 @@
+name: Production DB Backup
+
+# woshmart-production-db runs on Supabase's free tier. Unlike woshmart-staging-db
+# (Render free Postgres, which has a hard 44-day deletion clock -- see
+# staging-backup.yml and docs/SECURITY.md §3.9), Supabase's free tier pauses rather
+# than permanently deletes on inactivity, and is one-click restorable -- there is no
+# fixed calendar deadline to track here, so this workflow is backup-only, with no
+# deadline-reminder job. This daily pg_dump also doubles as the anti-pause heartbeat:
+# it's a real database query, running once a day, comfortably more often than
+# Supabase's ~7-day inactivity threshold -- no separate keep-alive job is needed for
+# that purpose, this one already covers it as a side effect.
+#
+# This is production's only backup mechanism -- Supabase's free tier has no native
+# backup feature (that's a paid-plan feature, same situation as Render's free
+# Postgres). Real customer/payment records live here, so this is not optional.
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # 03:00 UTC daily
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Dump production database
+        env:
+          PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+          DUMP_FILE="woshmart-production-${TIMESTAMP}.pgdump"
+          # Custom format (-Fc): compressed, restorable with pg_restore. --no-owner
+          # --no-acl: a fresh Postgres instance (Supabase or otherwise) has a
+          # different default role, so a dump with no owner/ACL statements restores
+          # cleanly without permission errors, same precedent as staging-backup.yml.
+          pg_dump "$PRODUCTION_DATABASE_URL" -Fc --no-owner --no-acl -f "$DUMP_FILE"
+          echo "DUMP_FILE=$DUMP_FILE" >> "$GITHUB_ENV"
+
+      - name: Upload dump to Backblaze B2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_PRODUCTION_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_PRODUCTION_APPLICATION_KEY }}
+        run: |
+          set -euo pipefail
+          aws s3 cp "$DUMP_FILE" "s3://${{ secrets.B2_PRODUCTION_BUCKET_NAME }}/$DUMP_FILE" \
+            --endpoint-url "${{ secrets.B2_PRODUCTION_ENDPOINT }}"
+          # Retention (30 days, deliberately longer than staging's 7 -- see
+          # docs/BUILD_LOG.md's Post-MVP log for the reasoning) is enforced by a
+          # bucket lifecycle rule configured directly in B2 (delete after 31 days
+          # from upload) -- not by any deletion logic here, so a workflow bug can't
+          # accidentally wipe out the only copies of recent backups.
