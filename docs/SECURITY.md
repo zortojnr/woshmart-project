@@ -98,9 +98,13 @@ Standalone security reference. `TRD.md` §7 and `CLAUDE.md`'s non-negotiable rul
 - `order_status_history` independently records every status transition regardless of trigger source, giving a second, order-centric audit trail alongside the admin-centric one.
 - Audit data itself is retained at least as long as the underlying order data it references.
 
-### 3.9 Backups & disaster recovery (Render Postgres — staging is currently free tier)
+### 3.9 Backups & disaster recovery
 
-Both staging (`woshmart-staging-db`) and production Postgres run on Render Postgres, not Neon (Neon is local-dev only). **Confirmed directly against Render's own docs, not assumed:** `woshmart-staging-db` is currently on Render's **free** Postgres tier, which has two consequences beyond the usual backup question:
+Staging (`woshmart-staging-db`) runs on Render Postgres; production (`woshmart-production-db`) runs on Supabase — a deliberate mid-Phase-8 change from the original all-Render plan (see `docs/PHASE_8_PRODUCTION_CUTOVER.md` §1 and `docs/BUILD_LOG.md`'s Phase 8 entry for the full reasoning). Neither is Neon (Neon is local-dev only). The two providers have genuinely different risk profiles, covered separately below — don't assume production inherits staging's specific 44-day-deletion-clock situation, it doesn't.
+
+#### Staging (Render Postgres, free tier)
+
+**Confirmed directly against Render's own docs, not assumed:** `woshmart-staging-db` is currently on Render's **free** Postgres tier, which has two consequences beyond the usual backup question:
 
 1. **No native backups at all.** Render's automated-backup feature requires a paid plan (Starter or above) — the free tier has none, not even a short retention window. This is a harder gap than "retention is too short" — there is nothing to restore from via Render itself.
 2. **Free-tier databases are deleted on a fixed clock, independent of usage.** Per Render's docs: a free Postgres instance expires **30 days after creation**, then gets a **14-day grace period** to upgrade before Render **permanently deletes the database and all its data**. Total lifespan: **44 days**, unless upgraded to a paid plan first.
@@ -152,6 +156,24 @@ This is tracked as a real date, not an abstract policy, specifically so it can't
 7. **Delete the old, expired database** once the new one is confirmed working, and record the date/what was verified here or in `docs/BUILD_LOG.md`'s Post-MVP log. No separate step is needed to reset the deletion-deadline reminder — step 3's `prisma migrate deploy` against the new instance already wrote the fresh `_prisma_migrations` row the reminder script reads its effective creation date from, so it's automatically tracking the new instance's clock the next time it runs.
 
 **The better long-term fix:** upgrading `woshmart-staging-db` to a paid Render plan before 2026-08-23 stops this clock entirely and gets Render's own native backups (§ above) instead of relying on this custom mechanism — worth doing regardless of how well the backup/restore path above works, since a custom pg_dump/B2 pipeline is a compensating control, not a replacement for the real thing.
+
+#### Production (Supabase, free tier)
+
+**Different risk shape than staging, not a smaller version of the same risk.** Supabase's free tier has no fixed deletion clock the way Render's does — per Supabase's own docs, a free project **pauses** (not deletes) after roughly a week without genuine database activity, and is restorable with one click from the dashboard within a documented one-year window. No native backup feature exists on the free tier either (same gap as Render's free Postgres — automated backups are a paid-plan feature there too), so the actual data-loss risk this section addresses is real regardless of the pause/delete distinction: **there is currently no way to recover production's data if the Supabase project itself is ever lost, corrupted, or the account becomes inaccessible**, pause-recovery only covers the "went idle" case, not those.
+
+**Compensating control:** `.github/workflows/production-backup.yml` runs daily (03:00 UTC), `pg_dump`s `woshmart-production-db` in the same custom format as staging (`-Fc --no-owner --no-acl`) via the Supabase **Session Pooler** connection string specifically (Direct is IPv6-only; Transaction Pooler isn't safe for `pg_dump`'s persistent-session requirement — see `docs/PHASE_8_PRODUCTION_CUTOVER.md` §1), and uploads to a dedicated private Backblaze B2 bucket, separate from staging's account credentials and bucket. **No deadline-reminder job** — unlike staging, there's no fixed date to count down to, so that half of staging's workflow doesn't apply here. **No separate anti-pause heartbeat job either** — this daily `pg_dump` is itself a real database query, running comfortably more often than Supabase's ~7-day inactivity threshold, so it already prevents the pause as a side effect; a dedicated heartbeat script would be redundant infrastructure for something this backup job already covers.
+
+**Retention: 30 days, not staging's 7** — a deliberate choice, not an oversight. Production holds real payment records; staging's short window is fine for disposable test data but wouldn't cover a real customer dispute investigated a couple of weeks after delivery. Enforced by a B2 bucket lifecycle rule (`31 days`, same 1-day buffer convention as staging's `8`), not by any deletion logic in the workflow.
+
+**Setup (Backblaze B2, separate bucket and key from staging):**
+1. Same B2 account as staging is fine — a **new bucket** (e.g. `woshmart-production-backups`), private, with its own lifecycle rule ("keep only files uploaded in the last 31 days").
+2. A **new Application Key** scoped only to that bucket, read+write, not the master key — kept fully separate from staging's key so a compromise of one never touches the other's backups.
+
+**GitHub repo secrets** (Settings → Secrets and variables → Actions), five, all distinctly named from staging's equivalents:
+- `PRODUCTION_DATABASE_URL` — same Session Pooler string as the Web Service's own `DATABASE_URL`.
+- `B2_PRODUCTION_KEY_ID`, `B2_PRODUCTION_APPLICATION_KEY`, `B2_PRODUCTION_BUCKET_NAME`, `B2_PRODUCTION_ENDPOINT`.
+
+**Restore procedure:** same shape as staging's (below), substituting a fresh Supabase project for a fresh Render Postgres instance in step 2, and `PRODUCTION_DATABASE_URL`/the production Web Service's `DATABASE_URL` for the staging equivalents throughout. Not yet actually rehearsed against production — worth doing once, deliberately, before relying on it in a real emergency, same caveat staging's own procedure carries.
 
 ### 3.10 Alerting (Render's built-in notifications)
 
